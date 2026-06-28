@@ -1,0 +1,7 @@
+#pragma once
+
+#define HESTIA_APP_NAME    "@APP_NAME@"
+#define HESTIA_APP_ID      "@APP_ID@"
+#define HESTIA_APP_VENDOR  "@APP_VENDOR@"
+#define HESTIA_APP_VERSION "@PROJECT_VERSION@"
+#define HESTIA_APP_CHANNEL "@APP_CHANNEL@"
