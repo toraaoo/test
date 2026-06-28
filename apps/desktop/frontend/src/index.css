@@ -1,0 +1,205 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Frameless-window drag regions. The title bar is draggable; interactive
+   controls inside it opt back out so clicks register as clicks, not drags. */
+@layer utilities {
+  .app-drag {
+    -webkit-app-region: drag;
+    app-region: drag;
+  }
+  .app-no-drag {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
+}
+
+@theme inline {
+    --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: 'Geist Mono Variable', ui-monospace, 'SF Mono', monospace;
+    --font-heading: var(--font-sans);
+
+    --color-signal: var(--signal);
+    --color-signal-foreground: var(--signal-foreground);
+
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+
+    /* Sharp, instrument-panel geometry: everything squares off. */
+    --radius-sm: 0px;
+    --radius-md: 0px;
+    --radius-lg: 0px;
+    --radius-xl: 0px;
+    --radius-2xl: 0px;
+    --radius-3xl: 0px;
+    --radius-4xl: 0px;
+}
+
+:root {
+    /* Cool, paper-white base — a drafting surface rather than pure white. */
+    --background: oklch(0.985 0.002 240);
+    --foreground: oklch(0.21 0.012 250);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.21 0.012 250);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.21 0.012 250);
+
+    /* Primary action stays a confident graphite — the tool, not the toy. */
+    --primary: oklch(0.24 0.012 250);
+    --primary-foreground: oklch(0.985 0.002 240);
+    --secondary: oklch(0.95 0.003 240);
+    --secondary-foreground: oklch(0.24 0.012 250);
+    --muted: oklch(0.955 0.003 240);
+    --muted-foreground: oklch(0.5 0.012 250);
+    --accent: oklch(0.94 0.004 240);
+    --accent-foreground: oklch(0.24 0.012 250);
+    --destructive: oklch(0.55 0.2 25);
+
+    --border: oklch(0.9 0.005 250);
+    --input: oklch(0.9 0.005 250);
+
+    /* Teal "signal" — the live-connection hue. Doubles as the focus ring. */
+    --signal: oklch(0.62 0.1 195);
+    --signal-foreground: oklch(0.99 0.002 240);
+    --ring: oklch(0.62 0.1 195);
+
+    --chart-1: oklch(0.62 0.1 195);
+    --chart-2: oklch(0.55 0.012 250);
+    --chart-3: oklch(0.44 0.012 250);
+    --chart-4: oklch(0.37 0.012 250);
+    --chart-5: oklch(0.27 0.012 250);
+
+    --radius: 0px;
+
+    --sidebar: oklch(0.97 0.003 240);
+    --sidebar-foreground: oklch(0.21 0.012 250);
+    --sidebar-primary: oklch(0.24 0.012 250);
+    --sidebar-primary-foreground: oklch(0.985 0.002 240);
+    --sidebar-accent: oklch(0.94 0.004 240);
+    --sidebar-accent-foreground: oklch(0.24 0.012 250);
+    --sidebar-border: oklch(0.9 0.005 250);
+    --sidebar-ring: oklch(0.62 0.1 195);
+}
+
+.dark {
+    /* Near-black graphite, faintly blue — an instrument at night. */
+    --background: oklch(0.17 0.008 250);
+    --foreground: oklch(0.92 0.004 240);
+    --card: oklch(0.205 0.009 250);
+    --card-foreground: oklch(0.92 0.004 240);
+    --popover: oklch(0.205 0.009 250);
+    --popover-foreground: oklch(0.92 0.004 240);
+
+    --primary: oklch(0.92 0.004 240);
+    --primary-foreground: oklch(0.2 0.009 250);
+    --secondary: oklch(0.26 0.01 250);
+    --secondary-foreground: oklch(0.92 0.004 240);
+    --muted: oklch(0.25 0.009 250);
+    --muted-foreground: oklch(0.65 0.01 245);
+    --accent: oklch(0.28 0.01 250);
+    --accent-foreground: oklch(0.95 0.004 240);
+    --destructive: oklch(0.68 0.18 25);
+
+    --border: oklch(1 0 0 / 9%);
+    --input: oklch(1 0 0 / 12%);
+
+    --signal: oklch(0.76 0.12 192);
+    --signal-foreground: oklch(0.17 0.008 250);
+    --ring: oklch(0.76 0.12 192);
+
+    --chart-1: oklch(0.76 0.12 192);
+    --chart-2: oklch(0.65 0.01 245);
+    --chart-3: oklch(0.55 0.01 245);
+    --chart-4: oklch(0.45 0.01 245);
+    --chart-5: oklch(0.35 0.01 245);
+
+    --sidebar: oklch(0.2 0.009 250);
+    --sidebar-foreground: oklch(0.92 0.004 240);
+    --sidebar-primary: oklch(0.76 0.12 192);
+    --sidebar-primary-foreground: oklch(0.17 0.008 250);
+    --sidebar-accent: oklch(0.28 0.01 250);
+    --sidebar-accent-foreground: oklch(0.95 0.004 240);
+    --sidebar-border: oklch(1 0 0 / 9%);
+    --sidebar-ring: oklch(0.76 0.12 192);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply font-sans;
+    /* Anchored type metrics so the mono/sans pairing sits evenly. */
+    font-feature-settings: "cv01", "ss01";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    /* Faint drafting grid — present, never loud. */
+    background-image:
+      linear-gradient(to right, var(--color-border) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--color-border) 1px, transparent 1px);
+    background-size: 64px 64px;
+    background-position: -1px -1px;
+  }
+
+  /* Teal text selection keeps the signal motif consistent. */
+  ::selection {
+    background-color: color-mix(in oklch, var(--signal) 28%, transparent);
+  }
+
+  /* Slim, squared scrollbars in keeping with the instrument look. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--color-border);
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-muted-foreground);
+  }
+}
