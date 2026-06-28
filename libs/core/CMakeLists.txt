@@ -1,8 +1,8 @@
 include(GNUInstallDirs)
 
 add_library(hestia_core STATIC
-        include/hestia/helper.h
-        src/helper.cc
+        include/hestia/logging.h
+        src/logging.cc
 )
 
 set_target_properties(hestia_core PROPERTIES OUTPUT_NAME "hestia")
@@ -15,8 +15,10 @@ target_include_directories(hestia_core
         src
 )
 
-find_package(spdlog REQUIRED)
-target_link_libraries(hestia_core PRIVATE spdlog::spdlog)
+target_link_libraries(hestia_core PRIVATE
+        spdlog::spdlog
+        fmt::fmt
+)
 
 target_compile_options(hestia_core PRIVATE
         $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic>
@@ -24,7 +26,6 @@ target_compile_options(hestia_core PRIVATE
 )
 
 install(TARGETS hestia_core
-        EXPORT hestia_coreTargets
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
-install(DIRECTORY include DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})

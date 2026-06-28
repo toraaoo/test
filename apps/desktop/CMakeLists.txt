@@ -14,6 +14,5 @@ target_link_libraries(hestia_desktop PRIVATE
 set_target_properties(hestia_desktop PROPERTIES OUTPUT_NAME "Hestia")
 
 install(TARGETS hestia_desktop
-        EXPORT hestia_cliTargets
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
