@@ -92,7 +92,9 @@ cmake --build build
 Binaries land in `build/Release/` (or `build/<config>/`):
 
 - `hestia` — CLI / TUI
-- `Hestia` — desktop launcher
+- `HestiaLauncher` — desktop launcher (named `HestiaLauncher` so it doesn't
+  collide with the `hestia` CLI on case-insensitive filesystems; the app still
+  presents itself as "Hestia")
 
 **Release** is sandboxed, stripped, and serves the embedded frontend. On Linux,
 make the sandbox helper SUID root once per build location:
@@ -100,7 +102,7 @@ make the sandbox helper SUID root once per build location:
 ```bash
 sudo chown root:root build/Release/chrome-sandbox
 sudo chmod 4755     build/Release/chrome-sandbox
-./build/Release/Hestia
+./build/Release/HestiaLauncher
 ```
 
 **Dev mode** (hot-reload against the Vite dev server, sandbox off):
@@ -111,7 +113,7 @@ cmake --build build
 # In a second terminal:
 (cd apps/desktop/frontend && bun run dev)
 # Then run with the dev-server URL:
-./build/Debug/Hestia --dev-url=http://localhost:5173
+./build/Debug/HestiaLauncher --dev-url=http://localhost:5173
 ```
 
 > A `dist/` must exist at configure time even in Debug (CMakeRC needs it). Run
@@ -200,6 +202,8 @@ pointer (`config set-home`) → the platform default (`~/.hestia`, or
   graph, core/TUI/CLI boundaries, and the TUI's component model.
 - **[docs/contributing.md](docs/contributing.md)** — conventions and step-by-step
   recipes for adding a view, layout, component, overlay, or CLI command.
+- **[docs/packaging.md](docs/packaging.md)** — how releases are built: formats,
+  the component model, the desktop/CEF layout, and CI caching.
 
 ## License
 
