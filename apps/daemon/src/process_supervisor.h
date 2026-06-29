@@ -3,15 +3,19 @@
 #include <cstdint>
 #include <chrono>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
-// The ProcessSupervisor seam (Phase 3). The daemon owns every launched process
-// — game servers and game client instances — so they outlive the frontend that
-// started them. All OS divergence (pidfd/subreaper on Linux, kqueue on macOS,
-// Job Objects on Windows) lives behind this interface; the process table and
-// lifecycle policy above it stay platform-neutral.
+#include <nlohmann/json.hpp>
+
+// The ProcessSupervisor seam. The daemon owns every launched process — game
+// servers and game client instances — so they outlive the frontend that started
+// them. Processes are spawned detached (double-fork) with output redirected to a
+// log file at the OS level, so they survive even a daemon crash and can be
+// re-adopted on the next start. All OS divergence lives behind this interface.
 namespace hestia::daemon {
     // What kind of process this is — drives the default restart policy (servers
     // may auto-restart; client instances do not).
@@ -36,13 +40,13 @@ namespace hestia::daemon {
         RestartPolicy restart{};
     };
 
-    // A row of the persisted process table. Serialized so a restarted (or
-    // crashed-and-relaunched) daemon can re-adopt what is still running.
+    // A row of the persisted process table. Serialized so a restarted daemon can
+    // re-adopt what is still running (pid + start_time disambiguates PID reuse).
     struct ProcessRecord {
         std::string id;
         ProcessKind kind = ProcessKind::Server;
         std::int64_t pid = 0;
-        std::int64_t start_time = 0; // disambiguates PID reuse on re-adoption
+        std::int64_t start_time = 0;
         std::filesystem::path log_path;
         ProcessState state = ProcessState::Starting;
     };
@@ -51,19 +55,30 @@ namespace hestia::daemon {
     public:
         virtual ~ProcessSupervisor() = default;
 
-        // Spawn detached from any UI, with stdout/stderr redirected to a log file
-        // at the OS level (so logs survive even a daemon crash).
+        // Spawn detached from any UI, stdout/stderr redirected to a log file.
         virtual ProcessRecord start(const LaunchSpec &spec) = 0;
 
-        // Stop a supervised process by id. No-op if it is not running.
+        // Signal a supervised process to stop by id. No-op if it is not running.
         virtual void stop(const std::string &id) = 0;
 
-        virtual std::vector<ProcessRecord> list() const = 0;
-        virtual std::optional<ProcessRecord> status(const std::string &id) const = 0;
+        // list()/status() refresh liveness before answering, so they are not const.
+        virtual std::vector<ProcessRecord> list() = 0;
+        virtual std::optional<ProcessRecord> status(const std::string &id) = 0;
+
+        // The last `max_lines` lines of a process's log, or nullopt if unknown.
+        virtual std::optional<std::string> tail_log(const std::string &id, int max_lines) = 0;
 
         // On daemon startup, reconcile the persisted table against what is
-        // actually alive and re-adopt survivors (PID + start_time, or subreaper /
-        // Job Object handle depending on platform).
+        // actually alive and re-adopt survivors.
         virtual void reconcile() = 0;
     };
+
+    // Wire helpers shared by the daemon's handlers and the persisted table.
+    nlohmann::json to_json(const ProcessRecord &record);
+    ProcessKind parse_kind(std::string_view kind);
+    LaunchSpec launch_spec_from_json(const nlohmann::json &payload);
+
+    // Construct the platform supervisor, persisting its table under `data_dir`.
+    std::unique_ptr<ProcessSupervisor> make_process_supervisor(
+        const std::filesystem::path &data_dir);
 }

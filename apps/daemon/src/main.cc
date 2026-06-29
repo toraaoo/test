@@ -3,6 +3,7 @@
 #include "hestia/ipc/transport.h"
 
 #include "config_service.h"
+#include "process_supervisor.h"
 #include "router.h"
 
 #include <hestia/app_info.h>
@@ -50,7 +51,8 @@ namespace {
 
     // Wire up every channel the daemon serves onto `router`.
     void register_handlers(hestia::daemon::Router &router,
-                           hestia::daemon::ConfigService &config) {
+                           hestia::daemon::ConfigService &config,
+                           hestia::daemon::ProcessSupervisor &supervisor) {
         router.on("health.ping", [](const Request &) {
             return Response::success({{"status", "alive"}, {"pid", current_pid()}});
         });
@@ -92,6 +94,42 @@ namespace {
             const auto dir = req.payload.value("dir", std::string{});
             return Response::success({{"path", config.set_home(dir).string()}});
         });
+
+        using hestia::daemon::launch_spec_from_json;
+        using hestia::daemon::to_json;
+
+        router.on("process.start", [&supervisor](const Request &req) {
+            const auto record = supervisor.start(launch_spec_from_json(req.payload));
+            return Response::success(to_json(record));
+        });
+
+        router.on("process.stop", [&supervisor](const Request &req) {
+            supervisor.stop(req.payload.at("id").get<std::string>());
+            return Response::success();
+        });
+
+        router.on("process.list", [&supervisor](const Request &) {
+            nlohmann::json processes = nlohmann::json::array();
+            for (const auto &record : supervisor.list()) processes.push_back(to_json(record));
+            return Response::success({{"processes", processes}});
+        });
+
+        router.on("process.status", [&supervisor](const Request &req) {
+            const auto id = req.payload.at("id").get<std::string>();
+            if (const auto record = supervisor.status(id)) {
+                return Response::success(to_json(*record));
+            }
+            return Response::failure("not_found", "no such process: " + id);
+        });
+
+        router.on("process.logs", [&supervisor](const Request &req) {
+            const auto id = req.payload.at("id").get<std::string>();
+            const int lines = req.payload.value("lines", 200);
+            if (const auto text = supervisor.tail_log(id, lines)) {
+                return Response::success({{"text", *text}});
+            }
+            return Response::failure("not_found", "no such process: " + id);
+        });
     }
 
     int run_daemon() {
@@ -105,8 +143,11 @@ namespace {
         }
 
         hestia::daemon::ConfigService config;
+        auto supervisor = hestia::daemon::make_process_supervisor(config.home());
+        supervisor->reconcile(); // re-adopt processes that survived a previous daemon
+
         hestia::daemon::Router router;
-        register_handlers(router, config);
+        register_handlers(router, config, *supervisor);
 
         g_listener.store(listener.get());
         std::signal(SIGINT, handle_signal);

@@ -4,11 +4,12 @@ This is the contract for Hestia's daemon (`hestiad`) and the frontends that
 drive it. It is the **Phase 0** artifact of the daemon migration: it freezes the
 boundary so the rest of the work doesn't churn it.
 
-> **Status:** Phases 1–2 done. The transport, endpoint resolution, single-instance
-> guard, JSON envelope, request router, and the typed client SDK exist; `config`,
-> `app.info`, and `app.greet` are served by the daemon, and the CLI drives them
-> over the bridge (auto-spawning the daemon on first use). Process supervision and
-> autostart are **planned** (see the phase markers below).
+> **Status:** the transport, endpoint resolution, single-instance guard, JSON
+> envelope, request router, and the typed client SDK exist; `config`, `app.info`,
+> and `app.greet` are served by the daemon, and the CLI drives them over the bridge
+> (auto-spawning the daemon on first use). Process supervision (`process.*`) is
+> implemented: processes are spawned detached, logged to disk, and re-adopted on
+> daemon restart. A live event/log stream and autostart are **planned**.
 
 ## Why a daemon
 
@@ -108,12 +109,30 @@ The envelope reuses the desktop CEF bridge's shape for consistency:
 `id` correlates responses once the connection is multiplexed (Phase 3 event
 stream). Until then it is optional.
 
-### Later phases: process control + events
+### Process control (now)
 
-- **Phase 3:** `process.start | stop | list | status | logs`, plus an event
-  stream (long-poll or SSE-style frames) for live log lines and status changes.
-- The persisted **process table** schema (survives daemon restart):
-  `{ id, kind: server|instance, pid, start_time, log_path, restart_policy, state }`.
+The daemon owns every launched process so it outlives the frontend. Processes are
+spawned via a double-fork (reparented to init, so they survive a daemon crash),
+with stdout/stderr redirected to a per-process log file at the OS level.
+
+| Channel          | Request payload                              | Response payload                |
+|------------------|----------------------------------------------|---------------------------------|
+| `process.start`  | `{id, kind, program, args?, cwd?, restart?}` | the process record              |
+| `process.stop`   | `{id}`                                        | *(empty)*                      |
+| `process.list`   | *(none)*                                      | `{processes: [record, …]}`      |
+| `process.status` | `{id}`                                        | the record, or error `not_found`|
+| `process.logs`   | `{id, lines?}`                                | `{text}` (last N log lines)     |
+
+A process **record** is `{id, kind: server|instance, pid, start_time, log_path,
+state: starting|running|exited|crashed}`. The table is persisted to
+`<data_home>/processes.json`; on startup `reconcile()` re-adopts any process whose
+pid is still alive **and** whose start time matches (guarding against PID reuse).
+
+### Later: events + auto-restart
+
+A live event stream (long-poll or SSE-style frames) for log lines and status
+changes, and periodic auto-restart enforcement of `restart_policy`, require the
+multiplexed connection and are still planned.
 
 ## Auth
 
