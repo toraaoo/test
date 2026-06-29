@@ -16,3 +16,9 @@ add_subdirectory(CLI11 EXCLUDE_FROM_ALL)
 # install rules out of our build.
 set(FTXUI_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
 add_subdirectory(FTXUI EXCLUDE_FROM_ALL)
+
+# nlohmann/json: header-only JSON for the daemon protocol envelope. Keep its
+# tests and install rules out of our build.
+set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
+set(JSON_Install OFF CACHE BOOL "" FORCE)
+add_subdirectory(json EXCLUDE_FROM_ALL)
