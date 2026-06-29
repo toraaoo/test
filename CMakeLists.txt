@@ -21,6 +21,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
+# The daemon supervises on background threads and the client SDK runs a reader
+# thread, so both link the platform threads library.
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+
 # ---- Shared application identity (consumed by hestia_shared + desktop) ------
 set(APP_NAME    "Hestia"                    CACHE STRING "Human-facing product name")
 set(APP_ID      "tech.lawrenceallen.hestia" CACHE STRING "Reverse-DNS application id")

@@ -5,31 +5,18 @@ namespace hestia::daemon {
         handlers_[std::move(channel)] = std::move(handler);
     }
 
-    std::string Router::dispatch(std::string_view raw_request) const {
-        ipc::Request request;
-        try {
-            request = ipc::decode_request(raw_request);
-        } catch (const std::exception &e) {
-            return ipc::encode(ipc::Response::failure("bad_request", e.what()));
-        }
-
+    ipc::Response Router::route(const ipc::Request &request) const {
         const auto it = handlers_.find(request.channel);
         if (it == handlers_.end()) {
-            auto response = ipc::Response::failure(
-                "unknown_channel", "unknown channel: " + request.channel);
-            response.id = request.id;
-            return ipc::encode(response);
+            return ipc::Response::failure("unknown_channel",
+                                          "unknown channel: " + request.channel);
         }
-
-        ipc::Response response;
         try {
-            response = it->second(request);
+            return it->second(request);
         } catch (const std::exception &e) {
             // A handler that throws (e.g. a missing payload field) becomes a clean
             // error rather than taking down the daemon.
-            response = ipc::Response::failure("handler_error", e.what());
+            return ipc::Response::failure("handler_error", e.what());
         }
-        response.id = request.id;
-        return ipc::encode(response);
     }
 }

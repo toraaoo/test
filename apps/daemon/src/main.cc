@@ -3,6 +3,7 @@
 #include "hestia/ipc/transport.h"
 
 #include "config_service.h"
+#include "event_hub.h"
 #include "process_supervisor.h"
 #include "router.h"
 
@@ -12,6 +13,8 @@
 #include <atomic>
 #include <csignal>
 #include <iostream>
+#include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -110,7 +113,7 @@ namespace {
 
         router.on("process.list", [&supervisor](const Request &) {
             nlohmann::json processes = nlohmann::json::array();
-            for (const auto &record : supervisor.list()) processes.push_back(to_json(record));
+            for (const auto &record: supervisor.list()) processes.push_back(to_json(record));
             return Response::success({{"processes", processes}});
         });
 
@@ -132,6 +135,39 @@ namespace {
         });
     }
 
+    // Serve one client connection: loop reading request frames, dispatch each,
+    // and write the correlated response. `events.subscribe` is handled here rather
+    // than in the router because it needs the connection itself to push to.
+    void handle_connection(std::shared_ptr<hestia::ipc::Connection> conn,
+                           const hestia::daemon::Router &router,
+                           hestia::daemon::EventHub &hub) {
+        while (auto frame = conn->recv()) {
+            Request req;
+            try {
+                req = hestia::ipc::decode_request(*frame);
+            } catch (const std::exception &e) {
+                conn->send(hestia::ipc::encode(
+                    Response::failure("bad_request", e.what())));
+                continue;
+            }
+
+            Response res;
+            if (req.channel == "events.subscribe") {
+                std::optional<std::string> filter;
+                if (req.payload.contains("id") && req.payload["id"].is_string()) {
+                    filter = req.payload["id"].get<std::string>();
+                }
+                hub.subscribe(conn, std::move(filter));
+                res = Response::success({{"subscribed", true}});
+            } else {
+                res = router.route(req);
+            }
+            res.id = req.id;
+            conn->send(hestia::ipc::encode(res));
+        }
+        hub.unsubscribe(conn.get());
+    }
+
     int run_daemon() {
         const auto endpoint = hestia::ipc::default_endpoint();
         std::unique_ptr<hestia::ipc::Listener> listener;
@@ -143,8 +179,12 @@ namespace {
         }
 
         hestia::daemon::ConfigService config;
+        hestia::daemon::EventHub hub;
+
         auto supervisor = hestia::daemon::make_process_supervisor(config.home());
+        supervisor->set_event_sink([&hub](const hestia::ipc::Event &e) { hub.publish(e); });
         supervisor->reconcile(); // re-adopt processes that survived a previous daemon
+        supervisor->start_supervision(); // poll liveness, stream logs, enforce restarts
 
         hestia::daemon::Router router;
         register_handlers(router, config, *supervisor);
@@ -157,7 +197,9 @@ namespace {
 #endif
 
         std::cerr << "hestiad: listening on " << endpoint.string() << '\n';
-        listener->serve([&router](std::string_view raw) { return router.dispatch(raw); });
+        listener->serve([&router, &hub](std::shared_ptr<hestia::ipc::Connection> conn) {
+            handle_connection(std::move(conn), router, hub);
+        });
         g_listener.store(nullptr);
         std::cerr << "hestiad: stopped\n";
         return 0;
@@ -166,11 +208,17 @@ namespace {
     int run_ping() {
         const auto endpoint = hestia::ipc::default_endpoint();
         try {
-            auto channel = hestia::ipc::connect(endpoint);
-            hestia::ipc::Request req;
+            auto conn = hestia::ipc::connect(endpoint);
+            Request req;
             req.channel = "health.ping";
-            std::cout << channel->send(hestia::ipc::encode(req)) << '\n';
-            return 0;
+            req.id = 1;
+            conn->send(hestia::ipc::encode(req));
+            if (const auto frame = conn->recv()) {
+                std::cout << *frame << '\n';
+                return 0;
+            }
+            std::cerr << "hestiad ping: no response\n";
+            return 1;
         } catch (const std::exception &e) {
             std::cerr << "hestiad ping: " << e.what() << '\n';
             return 1;

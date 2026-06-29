@@ -39,6 +39,7 @@ target_link_libraries(hestia_shared
         PRIVATE
         spdlog::spdlog
         fmt::fmt
+        Threads::Threads
 )
 
 target_compile_options(hestia_shared PRIVATE

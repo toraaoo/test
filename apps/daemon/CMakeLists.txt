@@ -8,6 +8,7 @@ add_executable(hestia_daemon
         src/router.cc
         src/router.h
         src/config_service.h
+        src/event_hub.h
         src/process_supervisor.cc
         src/process_supervisor.h
         src/autostart.h
@@ -19,6 +20,7 @@ target_link_libraries(hestia_daemon PRIVATE
         hestia_shared
         hestia_engine
         nlohmann_json::nlohmann_json
+        Threads::Threads
 )
 
 target_compile_options(hestia_daemon PRIVATE

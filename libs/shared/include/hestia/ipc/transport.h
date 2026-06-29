@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -12,31 +13,43 @@
 // message semantics (the channel/JSON envelope) live one layer up. See
 // docs/daemon-protocol.md.
 namespace hestia::ipc {
-    // Receives one raw request frame, returns the response frame. Invoked by the
-    // Listener for each incoming request.
-    using RequestHandler = std::function<std::string(std::string_view request)>;
+    // A full-duplex frame pipe. Both ends — the daemon (one per accepted
+    // connection) and every client — hold one. The connection is multiplexed:
+    // many frames may travel each way and correlation (request id, events) is the
+    // job of the layer above. send() is safe to call concurrently with recv() and
+    // with other send()s; recv() is meant to be driven by a single reader.
+    class Connection {
+    public:
+        virtual ~Connection() = default;
+
+        // Send one frame. Returns false if the peer is gone.
+        virtual bool send(std::string_view frame) = 0;
+
+        // Block for the next inbound frame; nullopt once the peer closes or the
+        // connection is close()d from another thread.
+        virtual std::optional<std::string> recv() = 0;
+
+        // Shut the connection down, unblocking a recv() in progress. Idempotent.
+        virtual void close() = 0;
+    };
+
+    // Invoked once per accepted connection, on its own thread. Returns when the
+    // connection should be torn down (typically when the peer disconnects).
+    using ConnectionHandler = std::function<void(std::shared_ptr<Connection>)>;
 
     // Server side, owned by the daemon. One instance per endpoint.
     class Listener {
     public:
         virtual ~Listener() = default;
 
-        // Block, accepting connections and dispatching frames to `handler`,
-        // until stop() is called.
-        virtual void serve(const RequestHandler &handler) = 0;
+        // Block, accepting connections and handing each to `on_connection` on a
+        // dedicated thread, until stop() is called. Joins all connection threads
+        // before returning.
+        virtual void serve(const ConnectionHandler &on_connection) = 0;
 
         // Unblock serve() and release the endpoint. Async-signal-safe, so it can
         // be called directly from a SIGINT/SIGTERM handler.
         virtual void stop() = 0;
-    };
-
-    // Client side, used by every frontend (wrapped by the client SDK in Phase 2).
-    class Channel {
-    public:
-        virtual ~Channel() = default;
-
-        // Send one request frame and block for the response frame.
-        virtual std::string send(std::string_view request) = 0;
     };
 
     // Bind a listener to `endpoint`, failing fast if another daemon already owns
@@ -44,7 +57,7 @@ namespace hestia::ipc {
     // reclaimed; a live one is refused). Throws std::system_error on failure.
     std::unique_ptr<Listener> bind_listener(const std::filesystem::path &endpoint);
 
-    // Connect to a daemon listening on `endpoint`. Throws std::system_error if no
-    // daemon is reachable.
-    std::unique_ptr<Channel> connect(const std::filesystem::path &endpoint);
+    // Open a persistent connection to a daemon listening on `endpoint`. Throws
+    // std::system_error if no daemon is reachable.
+    std::shared_ptr<Connection> connect(const std::filesystem::path &endpoint);
 }

@@ -12,7 +12,7 @@ namespace hestia::ipc {
         throw std::runtime_error("ipc: Windows named-pipe transport not yet implemented");
     }
 
-    std::unique_ptr<Channel> connect(const std::filesystem::path &) {
+    std::shared_ptr<Connection> connect(const std::filesystem::path &) {
         throw std::runtime_error("ipc: Windows named-pipe transport not yet implemented");
     }
 }

@@ -7,11 +7,14 @@
 #include <cerrno>
 #include <cstdint>
 #include <cstring>
+#include <mutex>
 #include <poll.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <system_error>
+#include <thread>
 #include <unistd.h>
+#include <vector>
 
 namespace hestia::ipc {
     namespace fs = std::filesystem;
@@ -85,6 +88,41 @@ namespace hestia::ipc {
             return ok;
         }
 
+        // A connected Unix-socket fd as a full-duplex frame pipe. send() is
+        // serialized so concurrent writers can't interleave frames; recv() is
+        // unblocked by close() shutting the fd down from another thread.
+        class PosixConnection final : public Connection {
+        public:
+            explicit PosixConnection(int fd) : fd_(fd) {}
+            ~PosixConnection() override { close(); }
+
+            bool send(std::string_view frame) override {
+                std::lock_guard<std::mutex> lk(write_mu_);
+                const int fd = fd_.load();
+                return fd >= 0 && write_frame(fd, frame);
+            }
+
+            std::optional<std::string> recv() override {
+                const int fd = fd_.load();
+                if (fd < 0) return std::nullopt;
+                std::string frame;
+                if (!read_frame(fd, frame)) return std::nullopt;
+                return frame;
+            }
+
+            void close() override {
+                const int fd = fd_.exchange(-1);
+                if (fd >= 0) {
+                    ::shutdown(fd, SHUT_RDWR); // wake a blocked recv()
+                    ::close(fd);
+                }
+            }
+
+        private:
+            std::atomic<int> fd_;
+            std::mutex write_mu_;
+        };
+
         class PosixListener final : public Listener {
         public:
             PosixListener(int fd, fs::path path) : fd_(fd), path_(std::move(path)) {
@@ -102,7 +140,7 @@ namespace hestia::ipc {
                 fs::remove(path_, ec); // best-effort cleanup of our own socket
             }
 
-            void serve(const RequestHandler &handler) override {
+            void serve(const ConnectionHandler &on_connection) override {
                 running_ = true;
                 while (running_) {
                     pollfd fds[2] = {
@@ -119,15 +157,24 @@ namespace hestia::ipc {
 
                     const int conn = ::accept(fd_, nullptr, nullptr);
                     if (conn < 0) continue;
-                    // Phase 1: one request/response per connection. The persistent,
-                    // multiplexed connection for the event stream arrives in Phase 3.
-                    std::string request;
-                    if (read_frame(conn, request)) {
-                        const std::string response = handler(request);
-                        write_frame(conn, response);
+
+                    reap_finished();
+                    auto connection = std::make_shared<PosixConnection>(conn);
+                    auto done = std::make_shared<std::atomic<bool>>(false);
+                    {
+                        std::lock_guard<std::mutex> lk(workers_mu_);
+                        live_.push_back(connection);
                     }
-                    ::close(conn);
+                    workers_.push_back(Worker{
+                        std::thread([this, connection, done, &on_connection] {
+                            on_connection(connection);
+                            forget(connection);
+                            done->store(true);
+                        }),
+                        done,
+                    });
                 }
+                shutdown_workers();
                 running_ = false;
             }
 
@@ -141,39 +188,52 @@ namespace hestia::ipc {
             }
 
         private:
+            struct Worker {
+                std::thread thread;
+                std::shared_ptr<std::atomic<bool>> done;
+            };
+
+            // Drop a connection from the live set once its handler returns.
+            void forget(const std::shared_ptr<PosixConnection> &connection) {
+                std::lock_guard<std::mutex> lk(workers_mu_);
+                std::erase(live_, connection);
+            }
+
+            // Join the threads of connections that have already finished, so the
+            // worker list doesn't grow without bound over the daemon's lifetime.
+            void reap_finished() {
+                for (auto it = workers_.begin(); it != workers_.end();) {
+                    if (it->done->load()) {
+                        if (it->thread.joinable()) it->thread.join();
+                        it = workers_.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+            }
+
+            // On shutdown, close every live connection to unblock its recv(),
+            // then join all handler threads before serve() returns.
+            void shutdown_workers() {
+                {
+                    std::lock_guard<std::mutex> lk(workers_mu_);
+                    for (const auto &connection : live_) connection->close();
+                }
+                for (auto &worker : workers_) {
+                    if (worker.thread.joinable()) worker.thread.join();
+                }
+                workers_.clear();
+                std::lock_guard<std::mutex> lk(workers_mu_);
+                live_.clear();
+            }
+
             int fd_ = -1;
             int stop_pipe_[2] = {-1, -1};
             fs::path path_;
             std::atomic<bool> running_{false};
-        };
-
-        class PosixChannel final : public Channel {
-        public:
-            explicit PosixChannel(fs::path path) : path_(std::move(path)) {}
-
-            std::string send(std::string_view request) override {
-                // Dial per request: matches the server's one-request-per-connection
-                // model in Phase 1 and avoids a half-open socket between calls.
-                const int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
-                if (fd < 0) throw_errno("socket");
-                sockaddr_un addr{};
-                fill_addr(addr, path_.string());
-                if (::connect(fd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0) {
-                    ::close(fd);
-                    throw_errno("connect");
-                }
-                std::string response;
-                const bool ok = write_frame(fd, request) && read_frame(fd, response);
-                ::close(fd);
-                if (!ok) {
-                    throw std::system_error(EIO, std::generic_category(),
-                                            "daemon closed the connection");
-                }
-                return response;
-            }
-
-        private:
-            fs::path path_;
+            std::mutex workers_mu_;
+            std::vector<std::shared_ptr<PosixConnection>> live_;
+            std::vector<Worker> workers_;
         };
     } // namespace
 
@@ -222,14 +282,23 @@ namespace hestia::ipc {
         return std::make_unique<PosixListener>(fd, endpoint);
     }
 
-    std::unique_ptr<Channel> connect(const fs::path &endpoint) {
-        // Fail fast here if nothing is listening, so callers get the error at
-        // connect() rather than on the first send().
-        if (!endpoint_alive(endpoint.string())) {
-            throw std::system_error(ENOENT, std::generic_category(),
+    std::shared_ptr<Connection> connect(const fs::path &endpoint) {
+        const int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
+        if (fd < 0) throw_errno("socket");
+        sockaddr_un addr{};
+        try {
+            fill_addr(addr, endpoint.string());
+        } catch (...) {
+            ::close(fd);
+            throw;
+        }
+        if (::connect(fd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0) {
+            const int err = errno;
+            ::close(fd);
+            throw std::system_error(err, std::generic_category(),
                                     "no daemon at " + endpoint.string());
         }
-        return std::make_unique<PosixChannel>(endpoint);
+        return std::make_shared<PosixConnection>(fd);
     }
 }
 
