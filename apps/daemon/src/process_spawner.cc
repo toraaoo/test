@@ -5,9 +5,12 @@
 #include <vector>
 
 #if !defined(_WIN32)
+#include <csignal>
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#else
+#include <windows.h>
 #endif
 
 namespace hestia::daemon {
@@ -90,6 +93,103 @@ namespace hestia::daemon {
                 }
                 return grandchild_pid;
             }
+
+            void terminate(std::int64_t pid) override {
+                if (pid > 0) ::kill(static_cast<pid_t>(pid), SIGTERM);
+            }
+        };
+#endif
+
+#if defined(_WIN32)
+        std::wstring widen(const std::string &s) {
+            if (s.empty()) return {};
+            const int n = ::MultiByteToWideChar(CP_UTF8, 0, s.data(),
+                                                static_cast<int>(s.size()), nullptr, 0);
+            std::wstring w(static_cast<std::size_t>(n), L'\0');
+            ::MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()),
+                                  w.data(), n);
+            return w;
+        }
+
+        // Quote one argument per the CommandLineToArgvW rules so paths and
+        // arguments with spaces or quotes round-trip to the child intact.
+        void append_arg(std::wstring &cmd, const std::wstring &arg) {
+            if (!cmd.empty()) cmd.push_back(L' ');
+            if (!arg.empty() && arg.find_first_of(L" \t\"") == std::wstring::npos) {
+                cmd += arg;
+                return;
+            }
+            cmd.push_back(L'"');
+            for (auto it = arg.begin();; ++it) {
+                unsigned slashes = 0;
+                while (it != arg.end() && *it == L'\\') { ++it; ++slashes; }
+                if (it == arg.end()) {
+                    cmd.append(slashes * 2, L'\\');
+                    break;
+                }
+                if (*it == L'"') {
+                    cmd.append(slashes * 2 + 1, L'\\');
+                } else {
+                    cmd.append(slashes, L'\\');
+                }
+                cmd.push_back(*it);
+            }
+            cmd.push_back(L'"');
+        }
+
+        class WindowsProcessSpawner final : public ProcessSpawner {
+        public:
+            // Detached child with stdout/stderr appended to the log file and stdin
+            // from NUL. Detaching keeps it alive across daemon restarts.
+            std::int64_t spawn(const LaunchSpec &spec, const fs::path &log) override {
+                std::wstring cmd;
+                append_arg(cmd, spec.program.wstring());
+                for (const auto &arg: spec.args) append_arg(cmd, widen(arg));
+
+                SECURITY_ATTRIBUTES sa{};
+                sa.nLength = sizeof(sa);
+                sa.bInheritHandle = TRUE;
+
+                HANDLE log_handle = ::CreateFileW(
+                    log.wstring().c_str(), FILE_APPEND_DATA,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_ALWAYS,
+                    FILE_ATTRIBUTE_NORMAL, nullptr);
+                HANDLE nul_handle = ::CreateFileW(
+                    L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa,
+                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+
+                STARTUPINFOW si{};
+                si.cb = sizeof(si);
+                si.dwFlags = STARTF_USESTDHANDLES;
+                si.hStdInput = nul_handle;
+                si.hStdOutput = log_handle != INVALID_HANDLE_VALUE ? log_handle : nul_handle;
+                si.hStdError = si.hStdOutput;
+
+                const std::wstring workdir = spec.working_dir.wstring();
+                std::wstring mutable_cmd = cmd; // CreateProcessW may modify it
+                PROCESS_INFORMATION pi{};
+                const BOOL ok = ::CreateProcessW(
+                    nullptr, mutable_cmd.data(), nullptr, nullptr, /*inherit=*/TRUE,
+                    DETACHED_PROCESS, nullptr,
+                    workdir.empty() ? nullptr : workdir.c_str(), &si, &pi);
+
+                if (log_handle != INVALID_HANDLE_VALUE) ::CloseHandle(log_handle);
+                if (nul_handle != INVALID_HANDLE_VALUE) ::CloseHandle(nul_handle);
+
+                if (!ok) throw std::runtime_error("failed to launch " + spec.program.string());
+                ::CloseHandle(pi.hThread);
+                ::CloseHandle(pi.hProcess);
+                return static_cast<std::int64_t>(pi.dwProcessId);
+            }
+
+            void terminate(std::int64_t pid) override {
+                if (pid <= 0) return;
+                if (HANDLE h = ::OpenProcess(PROCESS_TERMINATE, FALSE,
+                                             static_cast<DWORD>(pid))) {
+                    ::TerminateProcess(h, 1);
+                    ::CloseHandle(h);
+                }
+            }
         };
 #endif
     }
@@ -98,7 +198,7 @@ namespace hestia::daemon {
 #if !defined(_WIN32)
         return std::make_unique<PosixProcessSpawner>();
 #else
-        throw std::runtime_error("process spawning is not yet implemented on Windows");
+        return std::make_unique<WindowsProcessSpawner>();
 #endif
     }
 }

@@ -17,29 +17,24 @@
 
 #include <spdlog/spdlog.h>
 
-#if !defined(_WIN32)
-#include <csignal>
-#include <sys/types.h>
-#endif
-
 namespace hestia::daemon {
     namespace fs = std::filesystem;
 
-#if !defined(_WIN32)
     namespace {
         // The supervisor coordinates the focused collaborators (table, spawner,
         // liveness probe, log streamer, restart policy) under one lock and one
         // background loop. The collaborators hold the responsibilities; this class
-        // only sequences them. See P3 of the refactor.
-        class PosixProcessSupervisor final : public ProcessSupervisor {
+        // only sequences them. Platform specifics live behind the spawner and
+        // liveness-probe seams, so this is portable. See P3 of the refactor.
+        class ProcessSupervisorImpl final : public ProcessSupervisor {
         public:
-            explicit PosixProcessSupervisor(fs::path data_dir)
+            explicit ProcessSupervisorImpl(fs::path data_dir)
                 : logs_dir_(data_dir / "logs"),
                   table_(data_dir / "processes.json"),
                   spawner_(make_process_spawner()),
                   probe_(make_liveness_probe()) {}
 
-            ~PosixProcessSupervisor() override {
+            ~ProcessSupervisorImpl() override {
                 running_.store(false);
                 cv_.notify_all();
                 if (worker_.joinable()) worker_.join();
@@ -99,7 +94,7 @@ namespace hestia::daemon {
                     const auto it = records.find(id);
                     if (it == records.end()) return;
                     if (probe_->is_alive(it->second.pid)) {
-                        ::kill(static_cast<pid_t>(it->second.pid), SIGTERM);
+                        spawner_->terminate(it->second.pid);
                     }
                     // An operator stop is terminal: Exited is never auto-restarted.
                     it->second.state = ProcessState::Exited;
@@ -258,14 +253,8 @@ namespace hestia::daemon {
             std::condition_variable cv_;
         };
     } // namespace
-#endif // !_WIN32
 
     std::unique_ptr<ProcessSupervisor> make_process_supervisor(const fs::path &data_dir) {
-#if !defined(_WIN32)
-        return std::make_unique<PosixProcessSupervisor>(data_dir);
-#else
-        (void) data_dir;
-        throw std::runtime_error("process supervision is not yet implemented on Windows");
-#endif
+        return std::make_unique<ProcessSupervisorImpl>(data_dir);
     }
 }

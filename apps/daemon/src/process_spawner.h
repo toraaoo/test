@@ -19,6 +19,10 @@ namespace hestia::daemon {
         // the new process's pid. Throws std::runtime_error if the launch fails.
         virtual std::int64_t spawn(const LaunchSpec &spec,
                                    const std::filesystem::path &log) = 0;
+
+        // Request termination of a launched process. Best-effort: a pid that is
+        // already gone is not an error.
+        virtual void terminate(std::int64_t pid) = 0;
     };
 
     // The platform process spawner.

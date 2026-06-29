@@ -5,6 +5,8 @@
 
 #if !defined(_WIN32)
 #include <unistd.h>
+#else
+#include <windows.h>
 #endif
 
 namespace hestia::daemon {
@@ -13,7 +15,7 @@ namespace hestia::daemon {
 #if !defined(_WIN32)
             return static_cast<int>(::getpid());
 #else
-            return 0;
+            return static_cast<int>(::GetCurrentProcessId());
 #endif
         }
     }

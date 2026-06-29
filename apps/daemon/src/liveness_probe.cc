@@ -1,10 +1,10 @@
 #include "liveness_probe.h"
 
-#include <stdexcept>
-
 #if !defined(_WIN32)
 #include <cerrno>
 #include <csignal>
+#else
+#include <windows.h>
 #endif
 
 #if defined(__linux__)
@@ -62,13 +62,46 @@ namespace hestia::daemon {
             }
         };
 #endif
+
+#if defined(_WIN32)
+        class WindowsLivenessProbe final : public LivenessProbe {
+        public:
+            bool is_alive(std::int64_t pid) const override {
+                if (pid <= 0) return false;
+                HANDLE h = ::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
+                                         static_cast<DWORD>(pid));
+                if (!h) return false;
+                DWORD code = 0;
+                const bool ok = ::GetExitCodeProcess(h, &code) != 0;
+                ::CloseHandle(h);
+                return ok && code == STILL_ACTIVE;
+            }
+
+            // The process creation time disambiguates PID reuse (a new process at
+            // the same pid has a different creation time).
+            std::int64_t read_start_time(std::int64_t pid) const override {
+                if (pid <= 0) return 0;
+                HANDLE h = ::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
+                                         static_cast<DWORD>(pid));
+                if (!h) return 0;
+                FILETIME create{}, exit{}, kernel{}, user{};
+                std::int64_t result = 0;
+                if (::GetProcessTimes(h, &create, &exit, &kernel, &user)) {
+                    result = (static_cast<std::int64_t>(create.dwHighDateTime) << 32) |
+                             create.dwLowDateTime;
+                }
+                ::CloseHandle(h);
+                return result;
+            }
+        };
+#endif
     }
 
     std::unique_ptr<LivenessProbe> make_liveness_probe() {
 #if !defined(_WIN32)
         return std::make_unique<PosixLivenessProbe>();
 #else
-        throw std::runtime_error("liveness probing is not yet implemented on Windows");
+        return std::make_unique<WindowsLivenessProbe>();
 #endif
     }
 }
