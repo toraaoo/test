@@ -142,4 +142,58 @@ namespace hestia::client {
             p.value("channel", std::string{}),
         };
     }
+
+    namespace {
+        ProcessInfo process_from_json(const json &p) {
+            return ProcessInfo{
+                p.value("id", std::string{}),
+                p.value("kind", std::string{}),
+                p.value("state", std::string{}),
+                p.value("pid", 0LL),
+                p.value("start_time", 0LL),
+                p.value("log_path", std::string{}),
+            };
+        }
+    } // namespace
+
+    ProcessInfo Client::process_start(const ProcessSpec &spec) {
+        json payload = {
+            {"id", spec.id},
+            {"kind", spec.kind},
+            {"program", spec.program},
+            {"args", spec.args},
+        };
+        if (!spec.cwd.empty()) payload["cwd"] = spec.cwd;
+        return process_from_json(call(*channel_, "process.start", std::move(payload)).payload);
+    }
+
+    void Client::process_stop(std::string_view id) {
+        call(*channel_, "process.stop", {{"id", std::string(id)}});
+    }
+
+    std::vector<ProcessInfo> Client::process_list() {
+        const auto res = call(*channel_, "process.list", json::object());
+        std::vector<ProcessInfo> out;
+        for (const auto &entry : res.payload.value("processes", json::array())) {
+            out.push_back(process_from_json(entry));
+        }
+        return out;
+    }
+
+    std::optional<ProcessInfo> Client::process_status(std::string_view id) {
+        ipc::Request req;
+        req.channel = "process.status";
+        req.payload = {{"id", std::string(id)}};
+        const ipc::Response res = ipc::decode_response(channel_->send(ipc::encode(req)));
+        if (res.ok) return process_from_json(res.payload);
+        if (res.error && res.error->code == "not_found") return std::nullopt;
+        throw std::runtime_error(res.error ? res.error->code + ": " + res.error->message
+                                           : "process.status failed");
+    }
+
+    std::string Client::process_logs(std::string_view id, int lines) {
+        const auto res = call(*channel_, "process.logs",
+                              {{"id", std::string(id)}, {"lines", lines}});
+        return res.payload.value("text", std::string{});
+    }
 }

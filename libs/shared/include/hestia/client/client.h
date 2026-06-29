@@ -5,6 +5,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <hestia/ipc/transport.h>
 
@@ -18,6 +19,25 @@ namespace hestia::client {
         std::string id;
         std::string vendor;
         std::string channel;
+    };
+
+    // A process to launch via the daemon. `kind` is "server" or "instance".
+    struct ProcessSpec {
+        std::string id;
+        std::string kind = "server";
+        std::string program;
+        std::vector<std::string> args;
+        std::string cwd;
+    };
+
+    // A supervised process as reported by the daemon.
+    struct ProcessInfo {
+        std::string id;
+        std::string kind;
+        std::string state;
+        long long pid = 0;
+        long long start_time = 0;
+        std::string log_path;
     };
 
     class Client {
@@ -36,6 +56,14 @@ namespace hestia::client {
         std::filesystem::path config_set_home(std::string_view dir);
         std::string greet(std::string_view name);
         AppInfo app_info();
+
+        // Process supervision. start/stop/list/status/logs round-trip to the
+        // daemon, which owns the processes so they outlive this client.
+        ProcessInfo process_start(const ProcessSpec &spec);
+        void process_stop(std::string_view id);
+        std::vector<ProcessInfo> process_list();
+        std::optional<ProcessInfo> process_status(std::string_view id);
+        std::string process_logs(std::string_view id, int lines = 200);
 
     private:
         explicit Client(std::unique_ptr<ipc::Channel> channel)
