@@ -36,6 +36,8 @@ add_executable(hestia_tray
         src/tray_app.cc
         src/tray_app.h
         src/tray_backend.h
+        src/single_instance.cc
+        src/single_instance.h
         ${tray_backend}
         ${tray_resources}
 )
