@@ -22,15 +22,17 @@ permissions:
 
 jobs:
   package:
-    name: package (${{ matrix.os }})
+    name: package (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
+            platform: linux
             cache: ccache
           - os: windows-latest
+            platform: windows
             cache: ''
     steps:
       - uses: actions/checkout@v5
@@ -95,7 +97,7 @@ jobs:
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: hestia-${{ matrix.os }}
+          name: hestia-${{ matrix.platform }}
           path: artifacts/*
 
       - name: Publish to GitHub Release
