@@ -83,6 +83,13 @@ namespace hestia::client {
         std::string greet(std::string_view name);
         AppInfo app_info();
 
+        // Autostart: register/unregister the daemon to start with the user
+        // session, and query the current state. Backed by the platform's native
+        // mechanism (systemd user unit / LaunchAgent / logon Scheduled Task).
+        void autostart_enable();
+        void autostart_disable();
+        bool autostart_status();
+
         // Process supervision. start/stop/list/status/logs round-trip to the
         // daemon, which owns the processes so they outlive this client.
         ProcessInfo process_start(const ProcessSpec &spec);

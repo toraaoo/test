@@ -10,11 +10,22 @@
 // sides — the daemon's router and the client SDK — encode/decode through here, so
 // the wire format lives in exactly one place. See docs/daemon-protocol.md.
 namespace hestia::ipc {
+    // The protocol major version carried by every envelope. Client and daemon
+    // refuse an incompatible major at connect rather than guessing (see the
+    // "Versioning" section of docs/daemon-protocol.md). Bump on a breaking wire
+    // change; additive fields do not need a bump.
+    inline constexpr int kProtocolVersion = 1;
+
+    // Whether a peer advertising major `version` can talk to us. Same major only;
+    // additive changes within a major stay compatible.
+    inline constexpr bool compatible(int version) { return version == kProtocolVersion; }
+
     // A request: a channel name, a JSON payload, and an optional correlation id.
     struct Request {
         std::string channel;
         nlohmann::json payload = nlohmann::json::object();
         std::optional<long long> id;
+        int version = kProtocolVersion;
     };
 
     struct Error {
@@ -29,6 +40,7 @@ namespace hestia::ipc {
         nlohmann::json payload = nlohmann::json::object();
         std::optional<Error> error;
         std::optional<long long> id;
+        int version = kProtocolVersion;
 
         static Response success(nlohmann::json payload = nlohmann::json::object());
         static Response failure(std::string code, std::string message);

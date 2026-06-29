@@ -11,7 +11,7 @@ front-ends, so it's just as comfortable from a terminal as from a window.
 
 ## Front-ends
 
-Hestia is one core with three ways to drive it:
+Hestia is one core with several ways to drive it:
 
 - **Desktop** (`Hestia`) — the graphical launcher. The primary, "beautiful UI"
   experience.
@@ -19,6 +19,8 @@ Hestia is one core with three ways to drive it:
   power users.
 - **TUI** (`hestia tui`) — a full interactive terminal interface for working
   over SSH or without a desktop session.
+- **Tray** (`hestia-tray`) — a resident system-tray helper showing daemon status
+  and a one-click toggle for starting the daemon at login.
 
 The CLI and TUI live in the **same binary**: running `hestia` with no subcommand
 shows usage, and `hestia tui` launches the interactive interface.
@@ -33,6 +35,8 @@ hestia-cpp/
 │   ├── frontend/            Vite + React + TypeScript UI (built with Bun)
 │   └── src/core/            CEF shell — process model, IPC bridge, window, scheme
 ├── apps/cli/                hestia      — CLI + the `tui` subcommand (CLI11)
+├── apps/daemon/             hestiad     — the daemon: IPC, supervision, autostart
+├── apps/tray/               hestia-tray — resident system-tray helper (GDBus SNI)
 ├── cmake/                   CMake helpers (DownloadCEF, CMakeRC, PruneLocales)
 └── third_party/             vendored C++ dependencies (git submodules)
 ```
@@ -133,6 +137,11 @@ hestia config set <key> <value>
 hestia config get <key>
 hestia config home              # print the resolved data directory
 hestia config set-home <dir>    # persist the data dir for future runs
+
+# Autostart (start the background daemon at login)
+hestia autostart enable          # register the daemon to start at login
+hestia autostart disable         # remove the registration
+hestia autostart status          # print "enabled" or "disabled"
 
 # Logging verbosity (global flags, accepted at any position)
 hestia -v greet   # verbose / debug logging

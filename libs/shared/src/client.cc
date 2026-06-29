@@ -1,7 +1,10 @@
 #include "hestia/client/client.h"
 
 #include "hestia/ipc/endpoint.h"
+#include "hestia/ipc/errors.h"
+#include "hestia/ipc/process_codec.h"
 #include "hestia/ipc/protocol.h"
+#include "hestia/ipc/topics.h"
 #include "hestia/ipc/transport.h"
 
 #include <chrono>
@@ -22,14 +25,17 @@ namespace hestia::client {
     using nlohmann::json;
 
     namespace {
+        // Project the daemon's full process record (decoded once by the shared
+        // codec) onto the client's lighter ProcessInfo view.
         ProcessInfo process_from_json(const json &p) {
+            const auto rec = ipc::record_from_json(p);
             return ProcessInfo{
-                p.value("id", std::string{}),
-                p.value("kind", std::string{}),
-                p.value("state", std::string{}),
-                p.value("pid", 0LL),
-                p.value("start_time", 0LL),
-                p.value("log_path", std::string{}),
+                rec.id,
+                ipc::to_string(rec.kind),
+                ipc::to_string(rec.state),
+                rec.pid,
+                rec.start_time,
+                rec.log_path.string(),
             };
         }
 
@@ -37,7 +43,7 @@ namespace hestia::client {
             ProcessEvent out;
             out.topic = event.topic;
             out.id = event.payload.value("id", std::string{});
-            if (event.topic == "process.log") {
+            if (event.topic == ipc::topics::kProcessLog) {
                 out.log = event.payload.value("text", std::string{});
             } else {
                 out.process = process_from_json(event.payload);
@@ -203,13 +209,22 @@ namespace hestia::client {
             conn = connect_with_retry(endpoint);
             if (!conn) throw std::runtime_error("started hestiad but it did not become reachable");
         }
-        return Client(std::make_unique<Detail>(std::move(conn)));
+        Client client(std::make_unique<Detail>(std::move(conn)));
+        // Single skew check at connect: a daemon speaking an incompatible major
+        // fails fast and clearly rather than mis-parsing later messages.
+        const auto health = client.d_->call("health.ping", json::object());
+        if (!ipc::compatible(health.version)) {
+            throw std::runtime_error(
+                "hestiad speaks protocol v" + std::to_string(health.version) +
+                ", this client speaks v" + std::to_string(ipc::kProtocolVersion));
+        }
+        return client;
     }
 
     std::optional<std::string> Client::config_get(std::string_view key) {
         const auto res = d_->call("config.get", {{"key", std::string(key)}});
         if (res.ok) return res.payload.value("value", std::string{});
-        if (res.error && res.error->code == "not_found") return std::nullopt;
+        if (res.error && res.error->code == ipc::errors::kNotFound) return std::nullopt;
         throw std::runtime_error(res.error ? res.error->code + ": " + res.error->message
                                            : "config.get failed");
     }
@@ -248,20 +263,29 @@ namespace hestia::client {
         };
     }
 
+    void Client::autostart_enable() {
+        must(d_->call("autostart.enable", json::object()));
+    }
+
+    void Client::autostart_disable() {
+        must(d_->call("autostart.disable", json::object()));
+    }
+
+    bool Client::autostart_status() {
+        const auto res = must(d_->call("autostart.status", json::object()));
+        return res.payload.value("enabled", false);
+    }
+
     ProcessInfo Client::process_start(const ProcessSpec &spec) {
-        json payload = {
-            {"id", spec.id},
-            {"kind", spec.kind},
-            {"program", spec.program},
-            {"args", spec.args},
-            {"restart", {
-                {"auto", spec.restart.auto_restart},
-                {"max_retries", spec.restart.max_retries},
-                {"backoff_ms", spec.restart.backoff_ms},
-            }},
-        };
-        if (!spec.cwd.empty()) payload["cwd"] = spec.cwd;
-        return process_from_json(must(d_->call("process.start", std::move(payload))).payload);
+        ipc::LaunchSpec launch;
+        launch.id = spec.id;
+        launch.kind = ipc::parse_kind(spec.kind);
+        launch.program = spec.program;
+        launch.args = spec.args;
+        launch.working_dir = spec.cwd;
+        launch.restart = {spec.restart.auto_restart, spec.restart.max_retries,
+                          std::chrono::milliseconds(spec.restart.backoff_ms)};
+        return process_from_json(must(d_->call("process.start", ipc::to_json(launch))).payload);
     }
 
     void Client::process_stop(std::string_view id) {
@@ -280,7 +304,7 @@ namespace hestia::client {
     std::optional<ProcessInfo> Client::process_status(std::string_view id) {
         const auto res = d_->call("process.status", {{"id", std::string(id)}});
         if (res.ok) return process_from_json(res.payload);
-        if (res.error && res.error->code == "not_found") return std::nullopt;
+        if (res.error && res.error->code == ipc::errors::kNotFound) return std::nullopt;
         throw std::runtime_error(res.error ? res.error->code + ": " + res.error->message
                                            : "process.status failed");
     }

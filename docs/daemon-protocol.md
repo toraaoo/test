@@ -12,7 +12,9 @@ boundary so the rest of the work doesn't churn it.
 > daemon restart. The connection is **multiplexed** — many requests in flight at
 > once, correlated by `id` — and the daemon pushes a **live event stream** (log
 > lines, state changes) to subscribers. **Auto-restart** of crashed processes is
-> enforced by a background supervision loop. Autostart is **planned**.
+> enforced by a background supervision loop. **Autostart** (start the daemon at
+> login) is implemented for every platform, and a resident **tray helper**
+> (`hestia-tray`) surfaces daemon status and toggles autostart from the system tray.
 
 ## Why a daemon
 
@@ -190,6 +192,26 @@ after `backoff_ms`, up to `max_retries` (unlimited when `0`). An operator
 `process.stop` is terminal (`exited`) and is never restarted. Restarts reuse the
 same log file, so the stream is continuous across a restart.
 
+### Autostart
+
+Register the daemon to start with the user session. The daemon writes the
+registration against *its own* executable path (resolved from the OS), so it keeps
+pointing at the binary even if it moves.
+
+| Channel             | Request payload | Response payload      |
+|---------------------|-----------------|-----------------------|
+| `autostart.enable`  | *(none)*        | `{enabled: true}`     |
+| `autostart.disable` | *(none)*        | `{enabled: false}`    |
+| `autostart.status`  | *(none)*        | `{enabled: <bool>}`   |
+
+Each platform uses its native mechanism, behind the `Autostart` seam:
+
+| Platform | Mechanism                                                              |
+|----------|-----------------------------------------------------------------------|
+| Linux    | systemd **user unit** (`~/.config/systemd/user/hestiad.service` + a `default.target.wants` symlink, managed natively so it works without a running user manager) |
+| macOS    | **LaunchAgent** plist (`~/Library/LaunchAgents/<app-id>.plist`, `RunAtLoad`) |
+| Windows  | logon **Scheduled Task** (`schtasks /SC ONLOGON`)                     |
+
 ## Auth
 
 The socket is per-user and lives in a user-private runtime dir. Phase 1 relies on
@@ -198,22 +220,37 @@ and tightens socket mode, matching Syncthing's API-key model.
 
 ## Versioning
 
-The envelope carries a protocol version once it exists (Phase 2). Client/daemon
-skew is handled by refusing incompatible majors with a clear error rather than
-guessing.
+Every envelope carries a protocol major version in its `v` field (currently `1`).
+On connect, the client performs a one-shot handshake and refuses an incompatible
+major with a clear error rather than guessing — so a client/daemon skew fails fast
+instead of mis-parsing later messages. Additive fields within a major stay
+compatible and do not bump the version. The version constant and the compatibility
+check live in `hestia/ipc/protocol.h`.
 
 ## Cross-platform seams
 
-All platform divergence is confined to three interfaces. Everything above them —
+All platform divergence is confined to a few interfaces. Everything above them —
 protocol, process table, log format — is platform-neutral.
 
 | Seam                | Header                                  | Linux            | macOS            | Windows                    |
 |---------------------|-----------------------------------------|------------------|------------------|----------------------------|
 | `IpcTransport`      | `hestia/ipc/transport.h`                | Unix socket ✅    | Unix socket 🔜    | Named pipe 🔜               |
-| `ProcessSupervisor` | `apps/daemon/src/process_supervisor.h`  | `pidfd`, subreaper 🔜 | `kqueue` 🔜   | Job Objects 🔜              |
-| `Autostart`         | `apps/daemon/src/autostart.h`           | systemd user 🔜   | LaunchAgent 🔜    | logon Scheduled Task 🔜     |
+| `ProcessSupervisor` | `apps/daemon/src/process_supervisor.h`  | ✅ (`pidfd`/subreaper 🔜) | `kqueue` 🔜   | Job Objects 🔜              |
+| `Autostart`         | `apps/daemon/src/autostart.h`           | systemd user ✅   | LaunchAgent ✅¹   | logon Scheduled Task ✅¹    |
+| `TrayBackend`       | `apps/tray/src/tray_backend.h`          | SNI over GDBus ✅ | NSStatusItem ✅¹  | Shell_NotifyIcon ✅¹        |
 
-✅ implemented · 🔜 planned
+✅ implemented · 🔜 planned · ¹ written, verified on Linux only (no macOS/Windows
+toolchain in CI yet)
+
+The tray helper (`hestia-tray`) is a resident thin client: it links the client
+SDK and a `TrayBackend`, never the engine. On Linux the backend speaks the
+`org.kde.StatusNotifierItem` + `com.canonical.dbusmenu` D-Bus protocols directly
+over GDBus, so its only dependency is glib/gio — no GUI toolkit — which keeps the
+CLI headless-safe and the desktop app the only heavyweight frontend. The dbusmenu
+side is deliberately host-agnostic: it answers both the per-item `Event` and the
+batched `EventGroup` click paths (and `AboutToShow`/`AboutToShowGroup`), and it
+re-registers with the `StatusNotifierWatcher` every time it appears, so the icon
+survives a panel reload or a login race.
 
 ## Open decision (gates Phases 5–6)
 

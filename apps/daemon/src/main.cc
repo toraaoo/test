@@ -1,37 +1,37 @@
 #include "hestia/ipc/endpoint.h"
+#include "hestia/ipc/errors.h"
 #include "hestia/ipc/protocol.h"
 #include "hestia/ipc/transport.h"
 
 #include "config_service.h"
 #include "event_hub.h"
+#include "handler_context.h"
 #include "process_supervisor.h"
 #include "router.h"
+#include "services/services.h"
 
 #include <hestia/app_info.h>
-#include <hestia/greeting.h>
+#include <hestia/client/client.h>
+#include <hestia/logging.h>
+
+#include <CLI/CLI.hpp>
+#include <spdlog/spdlog.h>
 
 #include <atomic>
 #include <csignal>
 #include <iostream>
 #include <memory>
-#include <optional>
 #include <string>
-#include <string_view>
-
-#if !defined(_WIN32)
-#include <unistd.h>
-#endif
 
 // hestiad — the Hestia daemon.
 //
-//   hestiad            run the daemon: bind the endpoint, serve until signalled
-//   hestiad ping       connect to a running daemon, print its health response
+//   hestiad [serve]    run the daemon: bind the endpoint, serve until signalled
+//   hestiad ping       connect to a running daemon, report its identity
 //
 // The daemon owns the engine (config, greeting, and the launcher logic to come);
-// frontends reach it over the IPC bridge via the client SDK. Process supervision
-// and autostart arrive in later phases. Logging is plain stderr for now; the
-// structured logger is wired in during the hardening phase.
-
+// frontends reach it over the IPC bridge via the client SDK. main() only does
+// bootstrap, signal handling, and the serve loop — every channel lives in a
+// service under src/services/, registered onto the router.
 namespace {
     // The serving listener, so the signal handler can unblock serve(). Only
     // stop() (async-signal-safe) is ever called from the handler.
@@ -41,127 +41,27 @@ namespace {
         if (auto *l = g_listener.load()) l->stop();
     }
 
-    int current_pid() {
-#if !defined(_WIN32)
-        return static_cast<int>(::getpid());
-#else
-        return 0;
-#endif
-    }
-
-    using hestia::ipc::Request;
-    using hestia::ipc::Response;
-
-    // Wire up every channel the daemon serves onto `router`.
-    void register_handlers(hestia::daemon::Router &router,
-                           hestia::daemon::ConfigService &config,
-                           hestia::daemon::ProcessSupervisor &supervisor) {
-        router.on("health.ping", [](const Request &) {
-            return Response::success({{"status", "alive"}, {"pid", current_pid()}});
-        });
-
-        router.on("app.info", [](const Request &) {
-            return Response::success({
-                {"name", APP_NAME},
-                {"version", APP_VERSION},
-                {"id", APP_ID},
-                {"vendor", APP_VENDOR},
-                {"channel", APP_CHANNEL},
-            });
-        });
-
-        router.on("app.greet", [](const Request &req) {
-            const auto name = req.payload.value("name", std::string{});
-            return Response::success({{"message", hestia::greeting::greet(name)}});
-        });
-
-        router.on("config.get", [&config](const Request &req) {
-            const auto key = req.payload.at("key").get<std::string>();
-            if (const auto value = config.get(key)) {
-                return Response::success({{"value", *value}});
-            }
-            return Response::failure("not_found", "key not found: " + key);
-        });
-
-        router.on("config.set", [&config](const Request &req) {
-            config.set(req.payload.at("key").get<std::string>(),
-                       req.payload.at("value").get<std::string>());
-            return Response::success();
-        });
-
-        router.on("config.home", [&config](const Request &) {
-            return Response::success({{"path", config.home().string()}});
-        });
-
-        router.on("config.set-home", [&config](const Request &req) {
-            const auto dir = req.payload.value("dir", std::string{});
-            return Response::success({{"path", config.set_home(dir).string()}});
-        });
-
-        using hestia::daemon::launch_spec_from_json;
-        using hestia::daemon::to_json;
-
-        router.on("process.start", [&supervisor](const Request &req) {
-            const auto record = supervisor.start(launch_spec_from_json(req.payload));
-            return Response::success(to_json(record));
-        });
-
-        router.on("process.stop", [&supervisor](const Request &req) {
-            supervisor.stop(req.payload.at("id").get<std::string>());
-            return Response::success();
-        });
-
-        router.on("process.list", [&supervisor](const Request &) {
-            nlohmann::json processes = nlohmann::json::array();
-            for (const auto &record: supervisor.list()) processes.push_back(to_json(record));
-            return Response::success({{"processes", processes}});
-        });
-
-        router.on("process.status", [&supervisor](const Request &req) {
-            const auto id = req.payload.at("id").get<std::string>();
-            if (const auto record = supervisor.status(id)) {
-                return Response::success(to_json(*record));
-            }
-            return Response::failure("not_found", "no such process: " + id);
-        });
-
-        router.on("process.logs", [&supervisor](const Request &req) {
-            const auto id = req.payload.at("id").get<std::string>();
-            const int lines = req.payload.value("lines", 200);
-            if (const auto text = supervisor.tail_log(id, lines)) {
-                return Response::success({{"text", *text}});
-            }
-            return Response::failure("not_found", "no such process: " + id);
-        });
-    }
-
-    // Serve one client connection: loop reading request frames, dispatch each,
-    // and write the correlated response. `events.subscribe` is handled here rather
-    // than in the router because it needs the connection itself to push to.
-    void handle_connection(std::shared_ptr<hestia::ipc::Connection> conn,
-                           const hestia::daemon::Router &router,
-                           hestia::daemon::EventHub &hub) {
+    // Serve one client connection: loop reading request frames, dispatch each
+    // through the router with a per-request context, and write the correlated
+    // response. The context carries the connection, so streaming channels
+    // (events.subscribe) are ordinary handlers.
+    void serve_connection(std::shared_ptr<hestia::ipc::Connection> conn,
+                          const hestia::daemon::Router &router,
+                          hestia::daemon::ConfigService &config,
+                          hestia::daemon::ProcessSupervisor &supervisor,
+                          hestia::daemon::EventHub &hub) {
         while (auto frame = conn->recv()) {
-            Request req;
+            hestia::ipc::Request req;
             try {
                 req = hestia::ipc::decode_request(*frame);
             } catch (const std::exception &e) {
+                spdlog::warn("dropping malformed frame: {}", e.what());
                 conn->send(hestia::ipc::encode(
-                    Response::failure("bad_request", e.what())));
+                    hestia::ipc::Response::failure(hestia::ipc::errors::kBadRequest, e.what())));
                 continue;
             }
-
-            Response res;
-            if (req.channel == "events.subscribe") {
-                std::optional<std::string> filter;
-                if (req.payload.contains("id") && req.payload["id"].is_string()) {
-                    filter = req.payload["id"].get<std::string>();
-                }
-                hub.subscribe(conn, std::move(filter));
-                res = Response::success({{"subscribed", true}});
-            } else {
-                res = router.route(req);
-            }
+            hestia::daemon::HandlerContext ctx{config, supervisor, hub, conn};
+            auto res = router.route(req, ctx);
             res.id = req.id;
             conn->send(hestia::ipc::encode(res));
         }
@@ -174,7 +74,7 @@ namespace {
         try {
             listener = hestia::ipc::bind_listener(endpoint);
         } catch (const std::exception &e) {
-            std::cerr << "hestiad: cannot start: " << e.what() << '\n';
+            spdlog::error("cannot start: {}", e.what());
             return 1;
         }
 
@@ -187,7 +87,12 @@ namespace {
         supervisor->start_supervision(); // poll liveness, stream logs, enforce restarts
 
         hestia::daemon::Router router;
-        register_handlers(router, config, *supervisor);
+        hestia::daemon::register_health_service(router);
+        hestia::daemon::register_app_service(router);
+        hestia::daemon::register_config_service(router);
+        hestia::daemon::register_process_service(router);
+        hestia::daemon::register_autostart_service(router);
+        hestia::daemon::register_events_service(router);
 
         g_listener.store(listener.get());
         std::signal(SIGINT, handle_signal);
@@ -196,29 +101,26 @@ namespace {
         std::signal(SIGPIPE, SIG_IGN); // a client vanishing mid-write must not kill us
 #endif
 
-        std::cerr << "hestiad: listening on " << endpoint.string() << '\n';
-        listener->serve([&router, &hub](std::shared_ptr<hestia::ipc::Connection> conn) {
-            handle_connection(std::move(conn), router, hub);
+        spdlog::info("hestiad listening on {}", endpoint.string());
+        listener->serve([&](std::shared_ptr<hestia::ipc::Connection> conn) {
+            spdlog::debug("client connected");
+            serve_connection(std::move(conn), router, config, *supervisor, hub);
+            spdlog::debug("client disconnected");
         });
         g_listener.store(nullptr);
-        std::cerr << "hestiad: stopped\n";
+        spdlog::info("hestiad stopped");
         return 0;
     }
 
+    // `hestiad ping` reuses the client SDK's transport rather than reimplementing
+    // connect/encode/recv: connecting performs the version handshake, so a clean
+    // round-trip proves the daemon is reachable and compatible.
     int run_ping() {
-        const auto endpoint = hestia::ipc::default_endpoint();
         try {
-            auto conn = hestia::ipc::connect(endpoint);
-            Request req;
-            req.channel = "health.ping";
-            req.id = 1;
-            conn->send(hestia::ipc::encode(req));
-            if (const auto frame = conn->recv()) {
-                std::cout << *frame << '\n';
-                return 0;
-            }
-            std::cerr << "hestiad ping: no response\n";
-            return 1;
+            auto client = hestia::client::Client::connect(/*auto_spawn=*/false);
+            const auto info = client.app_info();
+            std::cout << info.name << ' ' << info.version << " — alive\n";
+            return 0;
         } catch (const std::exception &e) {
             std::cerr << "hestiad ping: " << e.what() << '\n';
             return 1;
@@ -227,9 +129,35 @@ namespace {
 }
 
 int main(int argc, char **argv) {
-    const std::string_view mode = argc > 1 ? argv[1] : "serve";
-    if (mode == "ping") return run_ping();
-    if (mode == "serve") return run_daemon();
-    std::cerr << "usage: hestiad [serve|ping]\n";
-    return 2;
+    CLI::App app{"hestiad — the Hestia daemon"};
+    app.set_version_flag("--version", std::string(APP_NAME) + " " + APP_VERSION);
+    app.fallthrough(); // accept the global -v/-q flags after the subcommand too
+
+    bool verbose = false;
+    bool quiet = false;
+    app.add_flag("-v,--verbose", verbose, "Verbose (debug) logging");
+    app.add_flag("-q,--quiet", quiet, "Warnings and errors only");
+
+    // The daemon already runs in the foreground; the client detaches it when it
+    // auto-spawns. --foreground is accepted for clarity and forward-compatibility.
+    bool foreground = false;
+    auto *serve = app.add_subcommand("serve", "Run the daemon (default)");
+    serve->add_flag("--foreground", foreground, "Run attached to this terminal");
+    auto *ping = app.add_subcommand("ping", "Check that a running daemon is reachable");
+    app.require_subcommand(0, 1);
+
+    CLI11_PARSE(app, argc, argv);
+
+    const auto level = verbose  ? hestia::LogLevel::debug
+                       : quiet  ? hestia::LogLevel::warn
+                                : hestia::LogLevel::info;
+
+    // ping is a one-shot foreground tool — stderr only. The long-lived daemon
+    // also logs to a rotated file, since the client detaches its stderr.
+    if (ping->parsed()) {
+        hestia::init_logging(level);
+        return run_ping();
+    }
+    hestia::init_logging(level, hestia::ipc::runtime_dir() / "hestiad.log");
+    return run_daemon();
 }

@@ -14,12 +14,17 @@ add_library(hestia_shared STATIC
         include/hestia/ipc/transport.h
         include/hestia/ipc/endpoint.h
         include/hestia/ipc/protocol.h
+        include/hestia/ipc/process.h
+        include/hestia/ipc/process_codec.h
+        include/hestia/ipc/errors.h
+        include/hestia/ipc/topics.h
         include/hestia/client/client.h
         src/logging.cc
         src/endpoint.cc
         src/transport_posix.cc
         src/transport_windows.cc
         src/protocol.cc
+        src/process_codec.cc
         src/client.cc
 )
 

@@ -19,6 +19,7 @@ namespace hestia::ipc {
 
     std::string encode(const Request &request) {
         json j;
+        j["v"] = request.version;
         j["channel"] = request.channel;
         j["payload"] = request.payload;
         if (request.id) j["id"] = *request.id;
@@ -31,6 +32,7 @@ namespace hestia::ipc {
 
     std::string encode(const Response &response) {
         json j;
+        j["v"] = response.version;
         j["ok"] = response.ok;
         if (response.ok) {
             j["payload"] = response.payload;
@@ -47,6 +49,7 @@ namespace hestia::ipc {
     Request decode_request(std::string_view frame) {
         const json j = json::parse(frame);
         Request r;
+        r.version = j.value("v", kProtocolVersion);
         r.channel = j.at("channel").get<std::string>();
         if (j.contains("payload") && !j["payload"].is_null()) r.payload = j["payload"];
         if (j.contains("id") && j["id"].is_number_integer()) r.id = j["id"].get<long long>();
@@ -55,6 +58,7 @@ namespace hestia::ipc {
 
     Response decode_response(const json &j) {
         Response r;
+        r.version = j.value("v", kProtocolVersion);
         r.ok = j.value("ok", false);
         if (r.ok) {
             r.payload = j.value("payload", json::object());
