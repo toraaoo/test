@@ -2,6 +2,10 @@
 
 #include <functional>
 
+namespace hestia::client {
+    class Client;
+}
+
 namespace hestia::tui {
     class Navigator;
     struct Theme;
@@ -10,6 +14,8 @@ namespace hestia::tui {
     // reference into View::build (mirrors a React <Context.Provider>). Shared
     // state lives here; everything else is component-local.
     struct AppContext {
+        client::Client *client = nullptr;
+
         // Ask the app to quit. Routes through the confirm-quit overlay rather
         // than exiting immediately.
         std::function<void()> request_quit;

@@ -1,11 +1,16 @@
 #include "hestia/tui/run.h"
 
+#include <exception>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
+
+#include <hestia/client/client.h>
+#include <spdlog/spdlog.h>
 
 #include "app_context.h"
 #include "input/global_keys.h"
@@ -40,10 +45,18 @@ namespace hestia::tui {
         }
         Navigator nav(std::move(view_ptrs));
 
+        std::optional<client::Client> client;
+        try {
+            client = client::Client::connect();
+        } catch (const std::exception &e) {
+            spdlog::warn("tui: daemon unreachable: {}", e.what());
+        }
+
         // Shared context (props-down to every view).
         AppContext ctx;
         ctx.theme = &theme;
         ctx.nav = &nav;
+        ctx.client = client ? &*client : nullptr;
         ctx.exit_app = screen.ExitLoopClosure();
         ctx.request_quit = [&nav] { nav.open_overlay(overlay::ConfirmQuit); };
 
