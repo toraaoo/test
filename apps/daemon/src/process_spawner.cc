@@ -1,5 +1,7 @@
 #include "process_spawner.h"
 
+#include "win_util.h"
+
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -102,16 +104,6 @@ namespace hestia::daemon {
 #endif
 
 #if defined(_WIN32)
-        std::wstring widen(const std::string &s) {
-            if (s.empty()) return {};
-            const int n = ::MultiByteToWideChar(CP_UTF8, 0, s.data(),
-                                                static_cast<int>(s.size()), nullptr, 0);
-            std::wstring w(static_cast<std::size_t>(n), L'\0');
-            ::MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()),
-                                  w.data(), n);
-            return w;
-        }
-
         // Quote one argument per the CommandLineToArgvW rules so paths and
         // arguments with spaces or quotes round-trip to the child intact.
         void append_arg(std::wstring &cmd, const std::wstring &arg) {

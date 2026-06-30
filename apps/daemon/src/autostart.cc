@@ -22,6 +22,8 @@
 
 #if defined(_WIN32)
 #include <windows.h>
+
+#include "win_util.h"
 #endif
 
 // Autostart backends. Each registers the *running daemon's own* executable
@@ -270,8 +272,7 @@ namespace hestia::daemon {
 
         private:
             static std::wstring task_name() {
-                const std::string name = std::string{APP_NAME} + " Daemon";
-                return std::wstring(name.begin(), name.end());
+                return widen(std::string{APP_NAME} + " Daemon");
             }
         };
 #endif // _WIN32

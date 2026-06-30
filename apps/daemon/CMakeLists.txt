@@ -22,6 +22,7 @@ add_executable(hestia_daemon
         src/restart_policy.h
         src/autostart.cc
         src/autostart.h
+        src/win_util.h
         src/services/services.h
         src/services/health_service.cc
         src/services/app_service.cc
