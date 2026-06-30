@@ -138,11 +138,7 @@ int main(int argc, char **argv) {
     app.add_flag("-v,--verbose", verbose, "Verbose (debug) logging");
     app.add_flag("-q,--quiet", quiet, "Warnings and errors only");
 
-    // The daemon already runs in the foreground; the client detaches it when it
-    // auto-spawns. --foreground is accepted for clarity and forward-compatibility.
-    bool foreground = false;
-    auto *serve = app.add_subcommand("serve", "Run the daemon (default)");
-    serve->add_flag("--foreground", foreground, "Run attached to this terminal");
+    app.add_subcommand("serve", "Run the daemon (default)");
     auto *ping = app.add_subcommand("ping", "Check that a running daemon is reachable");
     app.require_subcommand(0, 1);
 
