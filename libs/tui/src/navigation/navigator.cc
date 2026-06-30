@@ -14,7 +14,9 @@ namespace hestia::tui {
     }
 
     View *Navigator::active() const {
-        if (views_.empty()) return nullptr;
+        // selected_ is shared by reference with the FTXUI menu/tab, so guard the
+        // range rather than trust it — an out-of-range index would be UB.
+        if (selected_ < 0 || selected_ >= static_cast<int>(views_.size())) return nullptr;
         return views_[selected_];
     }
 
