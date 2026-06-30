@@ -9,7 +9,11 @@ namespace hestia::tui {
         using namespace ftxui;
         return hbox({
             text(" "),
-            key_hints({{"up/down", "navigate"}, {"enter", "select"}, {"q", "quit"}}, *ctx.theme),
+            key_hints({{"up/down", "navigate"},
+                       {"tab", "focus actions"},
+                       {"enter", "activate"},
+                       {"q", "quit"}},
+                      *ctx.theme),
             filler(),
         });
     }

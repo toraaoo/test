@@ -12,6 +12,7 @@
 #include "app_context.h"
 #include "components/button.h"
 #include "components/panel.h"
+#include "components/text_field.h"
 #include "theme/theme.h"
 
 namespace hestia::tui {
@@ -38,8 +39,8 @@ namespace hestia::tui {
         using namespace ftxui;
         load(ctx);
 
-        auto key_input = Input(&key_, "key");
-        auto value_input = Input(&value_, "value");
+        auto key_field = text_field(&key_, "key", *ctx.theme);
+        auto value_field = text_field(&value_, "value", *ctx.theme);
 
         auto get_button = pill_button(
             "Get",
@@ -47,7 +48,7 @@ namespace hestia::tui {
                 if (!ctx.client) return;
                 try {
                     value_ = ctx.client->config_get(key_).value_or("");
-                    config_status_ = value_.empty() ? "key not set" : "";
+                    config_status_ = value_.empty() ? "key not set" : "loaded";
                 } catch (const std::exception &e) {
                     config_status_ = e.what();
                 }
@@ -68,7 +69,7 @@ namespace hestia::tui {
             *ctx.theme);
 
         auto toggle_button = pill_button(
-            "Toggle autostart",
+            "Toggle",
             [this, &ctx] {
                 if (!ctx.client) return;
                 try {
@@ -86,35 +87,55 @@ namespace hestia::tui {
             *ctx.theme);
 
         auto container = Container::Vertical(
-            {key_input, value_input, get_button, set_button, toggle_button});
+            {key_field, value_field, get_button, set_button, toggle_button});
 
-        return Renderer(container, [this, &ctx, key_input, value_input, get_button,
+        return Renderer(container, [this, &ctx, key_field, value_field, get_button,
                                     set_button, toggle_button] {
             const Theme &theme = *ctx.theme;
+            const int label_w = 7;
+            const int field_w = 28;
 
-            Elements rows;
+            auto grid_row = [&](const std::string &label, Element field) {
+                return hbox({
+                    text(label) | theme.muted | size(WIDTH, EQUAL, label_w),
+                    field | size(WIDTH, EQUAL, field_w),
+                });
+            };
+
+            Elements body;
             if (!ctx.client) {
-                rows.push_back(text("daemon unavailable") | theme.muted);
-            } else {
-                rows.push_back(text("config") | theme.emphasis);
-                rows.push_back(hbox({text("key   ") | theme.muted,
-                                     key_input->Render() | size(WIDTH, EQUAL, 24) | border}));
-                rows.push_back(hbox({text("value ") | theme.muted,
-                                     value_input->Render() | size(WIDTH, EQUAL, 24) | border}));
-                rows.push_back(hbox({get_button->Render(), text("  "), set_button->Render()}));
-                if (!config_status_.empty()) rows.push_back(text(config_status_) | theme.muted);
-
-                rows.push_back(text(""));
-                rows.push_back(text("autostart") | theme.emphasis);
-                const std::string state =
-                    autostart_known_ ? (autostart_enabled_ ? "enabled" : "disabled") : "unknown";
-                rows.push_back(hbox({text("login start: ") | theme.muted, text(state) | theme.normal}));
-                rows.push_back(toggle_button->Render());
-                if (!autostart_error_.empty()) rows.push_back(text(autostart_error_) | theme.muted);
+                body.push_back(text("daemon unavailable") | theme.emphasis);
+                body.push_back(filler());
+                return panel("Settings", vbox(std::move(body)), theme) | flex;
             }
-            rows.push_back(filler());
 
-            return panel("Settings", vbox(std::move(rows)), theme) | flex;
+            body.push_back(text("Config") | theme.emphasis);
+            body.push_back(grid_row("key", key_field->Render()));
+            body.push_back(grid_row("value", value_field->Render()));
+            body.push_back(hbox({
+                text("") | size(WIDTH, EQUAL, label_w),
+                get_button->Render(),
+                text("  "),
+                set_button->Render(),
+            }));
+            if (!config_status_.empty())
+                body.push_back(grid_row("", text(config_status_) | theme.muted));
+
+            body.push_back(separatorEmpty());
+
+            const std::string state =
+                autostart_known_ ? (autostart_enabled_ ? "enabled" : "disabled") : "unknown";
+            body.push_back(text("Autostart") | theme.emphasis);
+            body.push_back(grid_row("login", text(state) | theme.normal));
+            body.push_back(hbox({
+                text("") | size(WIDTH, EQUAL, label_w),
+                toggle_button->Render(),
+            }));
+            if (!autostart_error_.empty())
+                body.push_back(grid_row("", text(autostart_error_) | theme.muted));
+
+            body.push_back(filler());
+            return panel("Settings", vbox(std::move(body)), theme) | flex;
         });
     }
 }

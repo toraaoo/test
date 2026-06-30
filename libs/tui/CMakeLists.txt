@@ -38,6 +38,8 @@ add_library(hestia_tui STATIC
         src/components/key_hint.cc
         src/components/button.h
         src/components/button.cc
+        src/components/text_field.h
+        src/components/text_field.cc
 
         # input
         src/input/keymap.h
