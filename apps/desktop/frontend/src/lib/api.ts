@@ -1,8 +1,6 @@
-// Typed surface for the backend's IPC channels.
-//
-// Each function wraps a registered C++ channel (see backend/src/features). Add a
-// function here whenever you register a new channel with core::ipc::Handle /
-// Actions::On so the rest of the app gets an end-to-end typed call.
+// Typed surface for the backend's IPC channels. Each function wraps a registered
+// C++ channel; add one here whenever you register a new channel so the app gets
+// an end-to-end typed call.
 
 import { invoke } from "@/lib/ipc"
 

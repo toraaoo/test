@@ -6,10 +6,8 @@
 #include <string>
 #include <vector>
 
-// The process-supervision domain types. They live in hestia_shared so the daemon
-// (which owns the processes) and the client SDK (which reports them) share one
-// definition and one wire codec — see ipc/process_codec.h. The wire shape is
-// defined exactly once, in the codec, not re-derived on either side.
+// The process-supervision domain types, shared by the daemon (which owns the
+// processes) and the client SDK (which reports them). Wire codec: process_codec.h.
 namespace hestia::ipc {
     // What kind of process this is — drives the default restart policy (servers
     // may auto-restart; client instances do not).

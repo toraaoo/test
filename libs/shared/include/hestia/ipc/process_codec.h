@@ -6,10 +6,8 @@
 
 #include <hestia/ipc/process.h>
 
-// The single home for process domain types ⇄ JSON. The daemon's supervisor, the
-// daemon's handlers, and the client SDK all (de)serialize through here, so a field
-// added to a record is added once and the two sides cannot drift. See A4 of the
-// daemon refactor.
+// The single home for process domain types ⇄ JSON. Daemon and client SDK both
+// (de)serialize through here, so a new field is added once and they cannot drift.
 namespace hestia::ipc {
     const char *to_string(ProcessKind kind);
     const char *to_string(ProcessState state);

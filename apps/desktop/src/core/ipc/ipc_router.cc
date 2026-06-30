@@ -4,8 +4,6 @@
 
 namespace desktop::ipc {
 
-// --- Response ----------------------------------------------------------------
-
 void Response::Success(const std::string& json) const {
     if (cb_) cb_->Success(json);
 }
@@ -14,16 +12,12 @@ void Response::Failure(int code, const std::string& msg) const {
     if (cb_) cb_->Failure(code, msg);
 }
 
-// --- Request::PayloadString --------------------------------------------------
-
 std::string Request::PayloadString() const {
     auto v = CefParseJSON(payload_raw, JSON_PARSER_ALLOW_TRAILING_COMMAS);
     if (v && v->GetType() == VTYPE_STRING)
         return v->GetString().ToString();
     return payload_raw;
 }
-
-// --- Registry ----------------------------------------------------------------
 
 Registry& Registry::Instance() {
     static Registry instance;
@@ -43,16 +37,12 @@ bool Registry::Handle(const std::string& channel,
     return true;
 }
 
-// --- Actions -----------------------------------------------------------------
-
 Actions::Actions(std::string prefix, Registry& reg)
     : prefix_(std::move(prefix)), registry_(reg) {}
 
 void Actions::operator()(const std::string& name, Handler handler) {
     registry_.Register(prefix_ + "." + name, std::move(handler));
 }
-
-// --- Message router ----------------------------------------------------------
 
 namespace {
 
@@ -114,8 +104,6 @@ void Emit(CefRefPtr<CefBrowser> browser,
     args->SetString(1, payload_json);
     browser->GetMainFrame()->SendProcessMessage(PID_RENDERER, msg);
 }
-
-// --- JSON helpers ------------------------------------------------------------
 
 std::string Str(const std::string& s) {
     auto v = CefValue::Create();

@@ -7,10 +7,7 @@
 
 // The LivenessProbe seam: "is this pid still ours?". Isolated so the OS-specific
 // mechanism (Linux /proc + kill(0) today; pidfd/kqueue later) can be swapped or
-// faked in tests without touching the supervisor. Tree teardown lives in the
-// spawner (process group / Job Object), and reaping our own children lives there
-// too; this seam only answers liveness for processes re-adopted after a restart.
-// See P3 of the refactor.
+// faked in tests. Answers liveness for processes re-adopted after a restart.
 namespace hestia::daemon {
     class LivenessProbe {
     public:

@@ -56,8 +56,6 @@ private:
     std::unordered_map<std::string, Handler> handlers_;
 };
 
-// --- module-level functions --------------------------------------------------
-
 // Initialize the browser-side message router (call once in OnContextInitialized).
 void Init();
 
@@ -69,7 +67,6 @@ void Emit(CefRefPtr<CefBrowser> browser,
           const std::string& channel,
           const std::string& payload_json);
 
-// --- JSON value helpers -------------------------------------------------------
 std::string Str(const std::string& s);
 std::string Int(int n);
 std::string Bool(bool b);

@@ -10,10 +10,8 @@
 #include "tray_backend.h"
 
 namespace hestia::tray {
-    // The platform-neutral tray helper. It holds one client connection to the
-    // daemon, seeds its state, subscribes to the live event stream, and projects
-    // the result into a TrayModel that the platform backend renders. The backend
-    // owns the UI loop; this class owns the daemon-facing logic.
+    // The platform-neutral tray helper: holds one client connection, subscribes to
+    // the event stream, and projects state into a TrayModel the backend renders.
     class TrayApp {
     public:
         TrayApp();

@@ -7,15 +7,11 @@
 
 #include "process_types.h"
 
-// The ProcessSpawner seam: launch a process as a child of the daemon, with its
-// stdout/stderr redirected to a log file at the OS level. This is the part that
-// must use raw OS primitives (fork/exec on POSIX, CreateProcess on Windows),
-// isolated so it can be replaced per platform and mocked in tests. Each process
-// leads its own group (process group / Job Object) so terminate() takes down the
-// whole tree, not just the launched pid. The child is a direct child — it still
-// outlives the daemon (orphaned to init / no kill-on-close), but while the daemon
-// runs it must reap() the child to learn its exit and free the pid. See P3 of the
-// refactor.
+// The ProcessSpawner seam: launch a process as a child of the daemon with its
+// stdout/stderr redirected to a log file at the OS level. Uses raw OS primitives
+// (fork/exec on POSIX, CreateProcess on Windows), isolated so it can be replaced
+// per platform and mocked in tests. Each process leads its own group (process
+// group / Job Object) so terminate() takes down the whole tree.
 namespace hestia::daemon {
     // The outcome of a finished child: its exit code, and whether a signal (POSIX)
     // killed it rather than a normal exit.

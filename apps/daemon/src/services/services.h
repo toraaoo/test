@@ -1,8 +1,7 @@
 #pragma once
 
 // Each daemon feature area registers its channels onto the router in its own
-// translation unit. Adding a feature area is one new file plus one call in
-// run_daemon — no edit to a shared monolith. See P1/A1 of the refactor.
+// translation unit. Adding one is a new file plus one call in run_daemon.
 namespace hestia::daemon {
     class Router;
 

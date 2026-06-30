@@ -10,11 +10,9 @@
 namespace hestia::tui {
     struct AppContext;
 
-    // A route-level screen. A view owns its component subtree and declares which
-    // layout arranges it. Analogous to a React page/route component: composed
-    // *from* presentational pieces in components/, never the other way round.
-    //
-    // Adding a view = one file here + one line in make_views(); no shell changes.
+    // A route-level screen: owns its component subtree and declares which layout
+    // arranges it (like a React page composed from components/). Adding one = a
+    // file here + a line in make_views().
     class View {
     public:
         virtual ~View() = default;

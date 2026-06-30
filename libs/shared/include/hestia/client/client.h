@@ -9,10 +9,8 @@
 #include <vector>
 
 // The thin client SDK every frontend (CLI/TUI/desktop/tray) uses to drive the
-// daemon. It is the single boundary frontends code against — they never link the
-// engine. The client holds one persistent, multiplexed connection: typed calls
-// are correlated by id (and may be issued concurrently), and the daemon can push
-// events (log lines, state changes) to a subscriber on the same connection.
+// daemon — the single boundary they code against. One persistent, multiplexed
+// connection: typed calls correlated by id, plus pushed events to a subscriber.
 namespace hestia::client {
     struct AppInfo {
         std::string name;

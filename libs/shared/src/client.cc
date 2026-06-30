@@ -72,7 +72,6 @@ namespace hestia::client {
         fs::path find_daemon();
 
 #if !defined(_WIN32)
-        // The directory of the current executable.
         fs::path self_dir() {
 #if defined(__APPLE__)
             char buf[4096];
@@ -110,7 +109,6 @@ namespace hestia::client {
             // to init. We just wait for its socket below.
         }
 #else
-        // The directory of the current executable.
         fs::path self_dir() {
             wchar_t buf[MAX_PATH];
             const DWORD n = ::GetModuleFileNameW(nullptr, buf, MAX_PATH);

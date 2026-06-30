@@ -8,10 +8,9 @@
 #include <hestia/config.h>
 
 namespace hestia::daemon {
-    // The daemon's view of configuration. Unlike the old per-invocation CLI model,
-    // the data directory is daemon-global: resolved once at startup (and again on
-    // set_home) from $HESTIA_HOME / the persisted pointer / the platform default.
-    // Frontends are served on concurrent connection threads, so access is guarded.
+    // The daemon's view of configuration. The data directory is daemon-global:
+    // resolved at startup (and on set_home) from $HESTIA_HOME / the persisted
+    // pointer / the platform default. Access is guarded for concurrent clients.
     class ConfigService {
     public:
         ConfigService() { reload(); }

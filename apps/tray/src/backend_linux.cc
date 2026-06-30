@@ -10,11 +10,9 @@
 
 #include <hestia/app_info.h>
 
-// Linux tray backend with no GUI toolkit: it speaks the StatusNotifierItem and
-// com.canonical.dbusmenu D-Bus protocols directly over GDBus (gio-2.0). These are
-// the same specs libayatana-appindicator wraps — talking to them natively keeps
-// the dependency surface to glib/gio (universally packaged, CI-trivial) and off
-// the GTK deprecation treadmill. The GMainLoop is the UI thread; set_model()/
+// Linux tray backend with no GUI toolkit: speaks the StatusNotifierItem and
+// com.canonical.dbusmenu D-Bus protocols directly over GDBus (gio-2.0), keeping
+// the dependency surface to glib/gio. The GMainLoop is the UI thread; set_model()/
 // quit() from other threads hop onto it with g_main_context_invoke().
 namespace hestia::tray {
     namespace {
@@ -188,8 +186,6 @@ namespace hestia::tray {
                 return G_SOURCE_REMOVE;
             }
 
-            // --- StatusNotifierItem ---
-
             static GVariant *item_get_property(GDBusConnection *, const gchar *, const gchar *,
                                                const gchar *, const gchar *name, GError **,
                                                gpointer self) {
@@ -234,8 +230,6 @@ namespace hestia::tray {
                 g_dbus_method_invocation_return_value(inv, nullptr);
             }
 
-            // --- com.canonical.dbusmenu ---
-
             static GVariant *menu_get_property(GDBusConnection *, const gchar *, const gchar *,
                                                const gchar *, const gchar *name, GError **,
                                                gpointer) {
@@ -265,7 +259,6 @@ namespace hestia::tray {
                 return g_variant_builder_end(&b);
             }
 
-            // A leaf layout node: (id, props, no children).
             static GVariant *leaf_node(int id, const MenuItem &item) {
                 GVariantBuilder children;
                 g_variant_builder_init(&children, G_VARIANT_TYPE("av"));
@@ -273,7 +266,6 @@ namespace hestia::tray {
                                      g_variant_builder_end(&children));
             }
 
-            // The root layout node (id 0) with every item as a child.
             GVariant *root_node() {
                 std::lock_guard<std::mutex> lk(mu_);
                 GVariantBuilder props;

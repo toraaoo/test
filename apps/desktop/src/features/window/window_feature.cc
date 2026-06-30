@@ -7,7 +7,6 @@ namespace desktop::features {
 
 namespace {
 
-// Build the window.state JSON object and push it as a push event.
 void EmitWindowState(CefRefPtr<CefWindow> win) {
     if (!win) return;
     auto browser = browser::ClientManager::Instance().GetMainBrowser();

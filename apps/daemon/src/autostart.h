@@ -2,12 +2,9 @@
 
 #include <memory>
 
-// The Autostart seam (Phase 5): register/unregister the daemon to start with the
-// user session. Each platform implements it with its native mechanism — systemd
-// user unit (Linux), LaunchAgent (macOS), logon Scheduled Task (Windows; a
-// Windows Service is the deferred alternative for surviving logout). All platform
-// divergence lives behind this interface, mirroring ProcessSupervisor and
-// IpcTransport.
+// The Autostart seam: register/unregister the daemon to start with the user
+// session, via each platform's native mechanism — systemd user unit (Linux),
+// LaunchAgent (macOS), logon Scheduled Task (Windows).
 namespace hestia::daemon {
     class Autostart {
     public:

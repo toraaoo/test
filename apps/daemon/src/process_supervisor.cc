@@ -22,11 +22,8 @@ namespace hestia::daemon {
     namespace fs = std::filesystem;
 
     namespace {
-        // The supervisor coordinates the focused collaborators (table, spawner,
-        // liveness probe, log streamer, restart policy) under one lock and one
-        // background loop. The collaborators hold the responsibilities; this class
-        // only sequences them. Platform specifics live behind the spawner and
-        // liveness-probe seams, so this is portable. See P3 of the refactor.
+        // Coordinates the collaborators (table, spawner, liveness probe, log
+        // streamer, restart policy) under one lock and one background loop.
         class ProcessSupervisorImpl final : public ProcessSupervisor {
         public:
             explicit ProcessSupervisorImpl(fs::path data_dir)

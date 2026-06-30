@@ -20,7 +20,6 @@ namespace hestia::tui {
     public:
         explicit Navigator(std::vector<View *> views);
 
-        // --- routing ---------------------------------------------------------
         // The selected index, shared by reference into the Menu and the Tab.
         int &selected();
         View *active() const;
@@ -29,7 +28,6 @@ namespace hestia::tui {
         void next();
         void prev();
 
-        // --- lifecycle -------------------------------------------------------
         // Fire the initial view's on_enter. Call once before the loop starts.
         void start();
         // Detect a selection change and fire on_exit/on_enter. Call once per
@@ -37,7 +35,6 @@ namespace hestia::tui {
         // directly, bypassing goto_route).
         void tick();
 
-        // --- overlays --------------------------------------------------------
         void open_overlay(OverlayId id);
         void close_overlay();
         bool has_overlay() const;

@@ -8,8 +8,7 @@
 
 // Per-process log tailing: tracks a read offset per process so the supervision
 // loop can stream only newly-appended bytes, and reads the last N lines on
-// demand. Pure file I/O, no OS-specific calls — testable against temp files.
-// See P3 of the refactor.
+// demand. Pure file I/O, no OS-specific calls.
 namespace hestia::daemon {
     class LogStreamer {
     public:

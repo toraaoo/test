@@ -24,10 +24,8 @@
 #include <windows.h>
 #endif
 
-// Autostart backends. The platform-neutral contract is in autostart.h; this file
-// holds the three native implementations. Each one registers the *running
-// daemon's own* executable (resolved from the OS) to start with the user session,
-// so the registration keeps pointing at the binary even if it is later moved.
+// Autostart backends. Each registers the *running daemon's own* executable
+// (resolved from the OS) so the registration survives the binary being moved.
 namespace hestia::daemon {
     namespace fs = std::filesystem;
 

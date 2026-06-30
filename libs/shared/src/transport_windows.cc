@@ -2,10 +2,9 @@
 
 #if defined(_WIN32)
 
-// Windows named-pipe transport. Mirrors transport_posix.cc's contract over a
-// byte-mode, message-framed named pipe (\\.\pipe\hestia-hestiad). Connections
-// use overlapped I/O so a close() from another thread can unblock an in-flight
-// recv()/send() via a shared close event — the analogue of POSIX shutdown().
+// Windows named-pipe transport, mirroring transport_posix.cc's contract.
+// Connections use overlapped I/O so a close() from another thread can unblock an
+// in-flight recv()/send() via a shared close event (the analogue of shutdown()).
 
 #include <windows.h>
 

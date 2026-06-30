@@ -5,9 +5,8 @@
 
 #include "process_types.h"
 
-// Pure restart-decision logic — no I/O, no clock of its own, no locks. The
-// riskiest arithmetic in the supervisor (the retry cap and the backoff window)
-// lives here so it can be unit-tested in isolation. See P3/A5 of the refactor.
+// Pure restart-decision logic — no I/O, no clock of its own, no locks. The retry
+// cap and the backoff window live here so they can be unit-tested in isolation.
 namespace hestia::daemon::restart {
     using Clock = std::chrono::steady_clock;
 

@@ -28,10 +28,8 @@
 //   hestiad [serve]    run the daemon: bind the endpoint, serve until signalled
 //   hestiad ping       connect to a running daemon, report its identity
 //
-// The daemon owns the engine (config, greeting, and the launcher logic to come);
-// frontends reach it over the IPC bridge via the client SDK. main() only does
-// bootstrap, signal handling, and the serve loop — every channel lives in a
-// service under src/services/, registered onto the router.
+// main() only does bootstrap, signal handling, and the serve loop — every channel
+// lives in a service under src/services/, registered onto the router.
 namespace {
     // The serving listener, so the signal handler can unblock serve(). Only
     // stop() (async-signal-safe) is ever called from the handler.

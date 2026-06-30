@@ -10,10 +10,9 @@
 #include <hestia/ipc/transport.h>
 
 namespace hestia::daemon {
-    // Fans daemon events out to subscribed client connections. A frontend opts in
-    // with the `events.subscribe` channel; thereafter the hub pushes matching
-    // event frames down its connection. Subscribers are held weakly, so a client
-    // that simply disconnects is pruned the next time it would be sent an event.
+    // Fans daemon events out to subscribed client connections (via the
+    // `events.subscribe` channel). Subscribers are held weakly, so a disconnected
+    // client is pruned the next time it would be sent an event.
     class EventHub {
     public:
         // Subscribe `conn` to events, optionally filtered to a single process id

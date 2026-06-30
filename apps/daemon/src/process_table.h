@@ -10,10 +10,8 @@
 
 // The persisted process table: the in-memory records plus their on-disk backing.
 // Persistence is atomic (write a temp file, then rename over the target) so a
-// crash mid-write can never leave a half-written, unparseable table — the failure
-// mode the old truncate-then-write had. A corrupt or absent file loads as empty.
-// The coordinator (ProcessSupervisor) serializes access; this type is not itself
-// thread-safe. See P3/A6 of the refactor.
+// crash mid-write can never leave a half-written table. A corrupt or absent file
+// loads as empty. Not thread-safe; the ProcessSupervisor serializes access.
 namespace hestia::daemon {
     class ProcessTable {
     public:

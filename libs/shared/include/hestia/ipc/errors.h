@@ -1,8 +1,7 @@
 #pragma once
 
 // The protocol's error-code vocabulary in one place. The daemon raises these and
-// the client matches on them; a named constant turns a typo from a silent runtime
-// mismatch into a compile error. See A9 of the daemon refactor.
+// the client matches on them; a named constant turns a typo into a compile error.
 namespace hestia::ipc::errors {
     inline constexpr const char *kNotFound = "not_found";
     inline constexpr const char *kBadRequest = "bad_request";

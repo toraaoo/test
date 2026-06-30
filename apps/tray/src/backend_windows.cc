@@ -10,8 +10,7 @@
 
 // Windows tray backend: a notification-area icon via Shell_NotifyIcon, driven by
 // a message-only window. The Win32 message loop is the UI thread; set_model()/
-// quit() from other threads marshal work in with PostMessage. The menu is built
-// on demand when the icon is clicked, from the last model handed to set_model().
+// quit() from other threads marshal work in with PostMessage.
 namespace hestia::tray {
     namespace {
         constexpr UINT kTrayCallback = WM_APP + 1; // icon mouse events

@@ -1,12 +1,7 @@
-// Typed bridge over the CEF message router.
-//
-// Request/response IPC goes through the standard `window.cefQuery` primitive
-// injected by the renderer process. Native -> JS events are delivered as DOM
-// CustomEvents dispatched on `window` (see backend/src/core/app/renderer_app.cc),
-// where the event name is the channel and `event.detail` is the JSON payload.
-//
-// The C++ side registers matching handlers with core::ipc::Handle("channel", ...)
-// and pushes events with core::ipc::Emit(browser, "channel", value).
+// Typed bridge over the CEF message router. Request/response goes through the
+// `window.cefQuery` primitive; native -> JS events arrive as DOM CustomEvents on
+// `window` (the event name is the channel, `event.detail` the JSON payload). The
+// C++ side registers handlers via core::ipc::Handle / Emit.
 
 declare global {
   interface Window {

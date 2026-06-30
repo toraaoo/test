@@ -5,12 +5,9 @@
 #include <string>
 #include <vector>
 
-// The tray-icon seam. The platform-neutral TrayApp builds a TrayModel — a
-// tooltip and a flat menu — and hands it to a TrayBackend, which renders it with
-// the OS-native mechanism (StatusNotifierItem via AppIndicator on Linux,
-// NSStatusItem on macOS, Shell_NotifyIcon on Windows). All GUI-toolkit divergence
-// lives behind this interface, mirroring the daemon's ProcessSupervisor/Autostart
-// seams.
+// The tray-icon seam. The platform-neutral TrayApp builds a TrayModel (tooltip +
+// flat menu) and hands it to a TrayBackend, which renders it with the OS-native
+// mechanism (SNI on Linux, NSStatusItem on macOS, Shell_NotifyIcon on Windows).
 namespace hestia::tray {
     // One entry in the tray menu. A separator ignores every other field; an item
     // with a null `on_click` is informational (typically disabled). `checked`

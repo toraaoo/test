@@ -11,7 +11,6 @@ namespace desktop::common {
 
 namespace {
 
-// Determine the MIME type for a file extension.
 std::string MimeFor(const std::string& path) {
     const auto dot = path.find_last_of('.');
     const std::string ext = dot == std::string::npos ? "" : path.substr(dot + 1);

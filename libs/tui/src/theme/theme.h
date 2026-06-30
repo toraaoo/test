@@ -3,15 +3,10 @@
 #include <ftxui/dom/elements.hpp>
 
 namespace hestia::tui {
-    // Visual styling for the TUI, expressed as semantic *roles* rather than fixed
-    // colors. Each role is an ftxui::Decorator built only from terminal-honoring
-    // primitives — Color::Default and text attributes (bold/dim/inverted). We
-    // deliberately enforce NO palette of our own: hierarchy is conveyed through
-    // attributes, so the UI inherits the user's terminal theme (foreground,
-    // background, and the 16 ANSI colors they have configured).
-    //
-    // To restyle, change the decorators here; layouts and components pull their
-    // styling from these roles and never hard-code a color.
+    // Visual styling for the TUI as semantic *roles*, not fixed colors. Each role
+    // is an ftxui::Decorator built only from terminal-honoring primitives (bold/
+    // dim/inverted), so the UI inherits the user's terminal theme — no palette of
+    // our own. Layouts and components pull styling from these roles, never a color.
     struct Theme {
         // Branding / primary headings.
         ftxui::Decorator brand = ftxui::bold;
