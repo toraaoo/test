@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <stdexcept>
 
 #include <hestia/config.h>
 
@@ -52,6 +53,18 @@ TEST(Config, SetOverwrites) {
     cfg.set("k", "one");
     cfg.set("k", "two");
     EXPECT_EQ(cfg.get("k").value_or(""), "two");
+}
+
+TEST(Config, SetRejectsCorruptingCharacters) {
+    Config cfg;
+    EXPECT_THROW(cfg.set("", "v"), std::invalid_argument);
+    EXPECT_THROW(cfg.set("a=b", "v"), std::invalid_argument);
+    EXPECT_THROW(cfg.set("a\nb", "v"), std::invalid_argument);
+    EXPECT_THROW(cfg.set("k", "line1\nline2"), std::invalid_argument);
+    EXPECT_THROW(cfg.set("k", "has\rcr"), std::invalid_argument);
+    // A value may contain '=' — only the key splits on it.
+    EXPECT_NO_THROW(cfg.set("url", "http://x?a=b"));
+    EXPECT_EQ(cfg.get("url").value_or(""), "http://x?a=b");
 }
 
 TEST(Config, LoadSkipsCommentsBlanksAndMalformedLines) {

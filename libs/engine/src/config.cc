@@ -126,6 +126,18 @@ namespace hestia::config {
     }
 
     void Config::set(std::string_view key, std::string_view value) {
+        // The on-disk format is one `key=value` line each, so a key/value
+        // carrying a newline (or a key carrying '=') would corrupt the file and
+        // mis-parse on load. Reject rather than silently mangle.
+        if (key.empty()) {
+            throw std::invalid_argument("config key must not be empty");
+        }
+        if (key.find_first_of("=\n\r") != std::string_view::npos) {
+            throw std::invalid_argument("config key must not contain '=', newline, or CR");
+        }
+        if (value.find_first_of("\n\r") != std::string_view::npos) {
+            throw std::invalid_argument("config value must not contain newline or CR");
+        }
         entries_.insert_or_assign(std::string(key), std::string(value));
     }
 
