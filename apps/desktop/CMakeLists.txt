@@ -34,6 +34,17 @@ endif()
 
 find_package(CEF REQUIRED)
 
+# CEF compiles with exceptions and RTTI disabled and propagates those flags to
+# every target (SET_*_TARGET_PROPERTIES). Our own code — and spdlog and the
+# throwing client SDK — need them, so strip the disabling flags from CEF's
+# variables here, before any target (including the wrapper below) consumes them.
+list(REMOVE_ITEM CEF_CXX_COMPILER_FLAGS -fno-exceptions -fno-rtti)
+list(REMOVE_ITEM CEF_COMPILER_FLAGS /GR-)
+list(REMOVE_ITEM CEF_COMPILER_DEFINES _HAS_EXCEPTIONS=0)
+if(MSVC)
+    list(APPEND CEF_CXX_COMPILER_FLAGS /EHsc)
+endif()
+
 # Per-config output dir CEF expects.
 if(CMAKE_CONFIGURATION_TYPES)
     set(CEF_TARGET_OUT_DIR "${CMAKE_BINARY_DIR}/$<CONFIG>")
@@ -97,6 +108,7 @@ set(DESKTOP_SRCS_COMMON
     src/core/app/browser_app.cc
     src/core/app/renderer_app.cc
     src/core/app/main_util.cc
+    src/core/app/tray_launcher.cc
     src/core/browser/client.cc
     src/core/browser/client_manager.cc
     src/core/common/app_scheme.cc

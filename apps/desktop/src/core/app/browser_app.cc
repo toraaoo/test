@@ -7,6 +7,7 @@
 #include "core/common/app_settings.h"
 #include "core/ipc/ipc_router.h"
 #include "core/window/window_delegate.h"
+#include "core/app/tray_launcher.h"
 #include "features/feature_registry.h"
 
 namespace desktop::app {
@@ -16,6 +17,7 @@ void BrowserApp::OnContextInitialized() {
     common::RegisterSchemeHandlerFactory();
     ipc::Init();
     features::RegisterAll();
+    SpawnTray();
 
     CefBrowserSettings browser_settings;
     auto view = CefBrowserView::CreateBrowserView(
