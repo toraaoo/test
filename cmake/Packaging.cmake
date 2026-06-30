@@ -3,7 +3,7 @@
 # via packaging/appimage/build-appimage.sh.
 #
 #   Linux   : DEB, RPM
-#   Windows : NSIS (.exe)
+#   Windows : NSIS (.exe), WiX (.msi)
 #
 # Component model:
 #   daemon      required           — hestiad
@@ -108,10 +108,38 @@ if(WIN32)
     set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS "${_nsis_uninstall}")
 endif()
 
-# Portable archives are built by cmake/package_portable.cmake; CPack drives the
-# installers and distro packages.
+# ---- Windows: WiX MSI -------------------------------------------------------
+# A per-machine MSI for managed/enterprise deployment (Program Files, system
+# PATH, admin) — the format SCCM/Intune/GPO expect. Runtime per-user/per-machine
+# selection is deliberately NOT offered here: CPack's WiX generator can't emit a
+# dual-purpose MSI, and the wider ecosystem (Tauri, Electron) keeps that choice
+# in the NSIS .exe — which Hestia also ships. See docs/packaging.md.
 if(WIN32)
-    set(CPACK_GENERATOR "NSIS")
+    set(CPACK_WIX_VERSION 3)
+    set(CPACK_WIX_INSTALL_SCOPE perMachine)
+    # Stable across releases so each MSI upgrades the previous in place (the
+    # template's MajorUpgrade keys on it). Generated once; never change it.
+    set(CPACK_WIX_UPGRADE_GUID "7C9A2F4E-3B1D-4A6E-9F2C-8D5B1E0A4C73")
+    set(CPACK_WIX_PRODUCT_ICON "${CMAKE_SOURCE_DIR}/packaging/icons/hestia.ico")
+    set(CPACK_WIX_PROGRAM_MENU_FOLDER "Hestia")
+    # CPACK_RESOURCE_FILE_LICENSE (the repo LICENSE) has no extension, which the
+    # WiX generator can't convert; point it at a ready-made RTF instead.
+    set(CPACK_WIX_LICENSE_RTF "${CMAKE_SOURCE_DIR}/packaging/windows/license.rtf")
+    # Append the CLI's bin/ to the system PATH, gated on the cli component. The
+    # component picker itself is the default WixUI_FeatureTree (auto-selected
+    # once CPack components exist), mirroring the NSIS picker.
+    set(CPACK_WIX_PATCH_FILE "${CMAKE_SOURCE_DIR}/packaging/windows/wix/path_env.xml")
+    # Start-menu + Desktop shortcuts for the launcher. The shortcut lives in the
+    # desktop component, so a CLI-only install gets none. The NSIS installer
+    # rolls its own conditional shortcuts and clears these in CPackOptions.
+    set(CPACK_PACKAGE_EXECUTABLES "${APP_BINARY_NAME};Hestia")
+    set(CPACK_CREATE_DESKTOP_LINKS "${APP_BINARY_NAME}")
+endif()
+
+# Portable archives are built by cmake/package_portable.cmake; CPack drives the
+# installers and distro packages. Windows ships both the NSIS .exe and the MSI.
+if(WIN32)
+    set(CPACK_GENERATOR "NSIS;WIX")
 elseif(UNIX AND NOT APPLE)
     set(CPACK_GENERATOR "DEB;RPM")
 endif()

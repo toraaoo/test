@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  CPack WiX patch: append the CLI's bin/ to the system PATH.
+
+  The fragment is injected into the component that owns hestia.exe, so the PATH
+  entry is installed (and removed) exactly when the `cli` feature is selected,
+  mirroring the NSIS installer. The component id is CPack's deterministic
+  CM_CP_<install-path-with-dots>; the CLI installs to bin/hestia.exe.
+
+  Action="set" Part="last" appends; with a per-machine install the Environment
+  element writes the system (HKLM) PATH automatically.
+
+  Path-length safety: this compiles to the Windows Installer WriteEnvironmentStrings
+  standard action, which rewrites the PATH registry value directly and adds only
+  this one segment. It has none of the fixed string-buffer overflow that forced
+  the NSIS installer off the built-in CPACK_NSIS_MODIFY_PATH macro onto the EnVar
+  plugin, so a long pre-existing system PATH is handled correctly here.
+-->
+<CPackWiXPatch>
+  <CPackWiXFragment Id="CM_CP_bin.hestia.exe">
+    <Environment Id="HestiaBinPath" Name="PATH" Action="set" Part="last"
+                 Permanent="no" Value="[INSTALL_ROOT]bin"/>
+  </CPackWiXFragment>
+</CPackWiXPatch>

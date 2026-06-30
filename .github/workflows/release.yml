@@ -3,7 +3,7 @@ name: Release
 # Builds and packages every front-end on version tags, then publishes the
 # artifacts to a GitHub Release:
 #   Linux   : portable .tar.gz, .deb, .rpm, AppImage
-#   Windows : portable .zip, NSIS .exe
+#   Windows : portable .zip, NSIS .exe, WiX .msi
 # All packages bundle the CLI/daemon; the desktop launcher + tray are an opt-in
 # component in the NSIS installer and bundled in every other artifact.
 
@@ -64,6 +64,13 @@ jobs:
           Expand-Archive -Path $zip -DestinationPath "$env:RUNNER_TEMP\envar" -Force
           Copy-Item "$env:RUNNER_TEMP\envar\Plugins\*" -Destination $dst -Recurse -Force
 
+          # WiX Toolset v3 (candle/light) for the MSI. Put its bin on PATH so
+          # CPack's WIX generator finds the tools in the packaging step.
+          choco install --no-progress -y wixtoolset
+          $wixBin = (Get-ChildItem "C:\Program Files (x86)\WiX Toolset v3*\bin" |
+                     Select-Object -First 1).FullName
+          Add-Content -Path $env:GITHUB_PATH -Value $wixBin
+
       - name: Package (Linux)
         if: runner.os == 'Linux'
         env:
@@ -93,6 +100,8 @@ jobs:
           cd build
           cpack -G NSIS
           Move-Item hestia-*.exe ../artifacts/
+          cpack -G WIX
+          Move-Item hestia-*.msi ../artifacts/
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4

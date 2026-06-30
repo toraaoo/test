@@ -7,4 +7,11 @@ if(CPACK_GENERATOR MATCHES "^(DEB|RPM)$")
     set(CPACK_RPM_COMPONENT_INSTALL ON)
 elseif(CPACK_GENERATOR STREQUAL "NSIS")
     set(CPACK_COMPONENTS_GROUPING IGNORE)
+    # NSIS rolls its own component-gated shortcuts (EXTRA_INSTALL_COMMANDS);
+    # drop the auto-shortcut vars the MSI uses so they don't dangle here.
+    unset(CPACK_PACKAGE_EXECUTABLES)
+    unset(CPACK_CREATE_DESKTOP_LINKS)
+elseif(CPACK_GENERATOR STREQUAL "WIX")
+    # Per-component features so the MSI shows the daemon/cli/desktop picker.
+    set(CPACK_COMPONENTS_GROUPING IGNORE)
 endif()
