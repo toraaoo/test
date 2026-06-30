@@ -15,15 +15,17 @@ concurrency:
 
 jobs:
   build:
-    name: build (${{ matrix.os }})
+    name: build (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
+            platform: linux
             cache: ccache
           - os: windows-latest
+            platform: windows
             cache: ''
     steps:
       - uses: actions/checkout@v5
