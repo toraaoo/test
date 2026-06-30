@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <cstdint>
 #include <map>
 #include <mutex>
 #include <stdexcept>
@@ -22,6 +23,18 @@ namespace hestia::daemon {
     namespace fs = std::filesystem;
 
     namespace {
+        constexpr std::uintmax_t kMaxLogBytes = 10u * 1024 * 1024;
+
+        // Cap log growth across crash-looping relaunches by rotating to <log>.1.
+        void rotate_log_if_large(const fs::path &log) {
+            std::error_code ec;
+            if (const auto size = fs::file_size(log, ec); ec || size < kMaxLogBytes) return;
+            fs::path rotated = log;
+            rotated += ".1";
+            fs::remove(rotated, ec);
+            fs::rename(log, rotated, ec);
+        }
+
         // Coordinates the collaborators (table, spawner, liveness probe, log
         // streamer, restart policy) under one lock and one background loop.
         class ProcessSupervisorImpl final : public ProcessSupervisor {
@@ -261,6 +274,7 @@ namespace hestia::daemon {
                 spec.args = rec.args;
                 spec.working_dir = rec.working_dir;
                 spec.restart = rec.restart;
+                rotate_log_if_large(rec.log_path);
                 const std::int64_t pid = spawner_->spawn(spec, rec.log_path);
                 rec.pid = pid;
                 rec.start_time = probe_->read_start_time(pid);
