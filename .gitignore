@@ -694,6 +694,4 @@ build-*/
 # CEF binary distribution (~1 GB) — fetched at configure time, never committed.
 /third_party/cef/
 
-# Desktop frontend build artefacts
-/apps/desktop/frontend/node_modules/
-/apps/desktop/frontend/dist/
+.hestia
