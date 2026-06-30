@@ -8,6 +8,8 @@
 
 #include <windows.h>
 
+#include <sddl.h>
+
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
@@ -42,14 +44,63 @@ namespace hestia::ipc {
                    static_cast<std::uint32_t>(p[3]);
         }
 
+        std::wstring current_user_sid() {
+            HANDLE token = nullptr;
+            if (!::OpenProcessToken(::GetCurrentProcess(), TOKEN_QUERY, &token)) {
+                return {};
+            }
+            DWORD len = 0;
+            ::GetTokenInformation(token, TokenUser, nullptr, 0, &len);
+            std::vector<unsigned char> buf(len);
+            std::wstring sid;
+            if (len && ::GetTokenInformation(token, TokenUser, buf.data(), len, &len)) {
+                auto *user = reinterpret_cast<TOKEN_USER *>(buf.data());
+                LPWSTR str = nullptr;
+                if (::ConvertSidToStringSidW(user->User.Sid, &str)) {
+                    sid = str;
+                    ::LocalFree(str);
+                }
+            }
+            ::CloseHandle(token);
+            return sid;
+        }
+
+        // Restricts the pipe to the current user and LocalSystem; the default DACL
+        // would let any local authenticated user connect. get() is null on failure.
+        class PipeSecurity {
+        public:
+            PipeSecurity() {
+                std::wstring sddl = L"D:(A;;FA;;;SY)";
+                if (const std::wstring sid = current_user_sid(); !sid.empty()) {
+                    sddl += L"(A;;FA;;;" + sid + L")";
+                }
+                if (::ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                        sddl.c_str(), SDDL_REVISION_1, &sd_, nullptr)) {
+                    sa_.nLength = sizeof(sa_);
+                    sa_.lpSecurityDescriptor = sd_;
+                    sa_.bInheritHandle = FALSE;
+                }
+            }
+            ~PipeSecurity() { if (sd_) ::LocalFree(sd_); }
+            PipeSecurity(const PipeSecurity &) = delete;
+            PipeSecurity &operator=(const PipeSecurity &) = delete;
+
+            SECURITY_ATTRIBUTES *get() { return sd_ ? &sa_ : nullptr; }
+
+        private:
+            PSECURITY_DESCRIPTOR sd_ = nullptr;
+            SECURITY_ATTRIBUTES sa_{};
+        };
+
         HANDLE create_pipe_instance(const std::wstring &name, bool first) {
             DWORD open_mode = PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED;
             if (first) open_mode |= FILE_FLAG_FIRST_PIPE_INSTANCE;
+            PipeSecurity sec;
             return ::CreateNamedPipeW(
                 name.c_str(), open_mode,
                 PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT |
                     PIPE_REJECT_REMOTE_CLIENTS,
-                PIPE_UNLIMITED_INSTANCES, kPipeBuffer, kPipeBuffer, 0, nullptr);
+                PIPE_UNLIMITED_INSTANCES, kPipeBuffer, kPipeBuffer, 0, sec.get());
         }
 
         // A connected pipe handle as a full-duplex frame pipe. recv() and send()
@@ -201,7 +252,7 @@ namespace hestia::ipc {
                     }
                     workers_.push_back(Worker{
                         std::thread([this, connection, done, &on_connection] {
-                            on_connection(connection);
+                            on_connection(connection, Peer{});
                             forget(connection);
                             done->store(true);
                         }),

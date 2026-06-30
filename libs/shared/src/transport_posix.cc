@@ -1,6 +1,14 @@
+// _GNU_SOURCE exposes struct ucred / SO_PEERCRED on Linux; must precede any
+// system header so the feature-test macro takes effect.
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE
+#endif
+
 #include "hestia/ipc/transport.h"
 
 #if !defined(_WIN32)
+
+#include <spdlog/spdlog.h>
 
 #include <arpa/inet.h>
 #include <atomic>
@@ -10,6 +18,7 @@
 #include <mutex>
 #include <poll.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/un.h>
 #include <system_error>
 #include <thread>
@@ -88,6 +97,38 @@ namespace hestia::ipc {
             return ok;
         }
 
+        bool peer_uid(int fd, std::uint32_t &uid) {
+#if defined(__linux__)
+            ucred cred{};
+            socklen_t len = sizeof(cred);
+            if (::getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &cred, &len) != 0) return false;
+            uid = cred.uid;
+            return true;
+#else
+            uid_t u = 0;
+            gid_t g = 0;
+            if (::getpeereid(fd, &u, &g) != 0) return false;
+            uid = static_cast<std::uint32_t>(u);
+            return true;
+#endif
+        }
+
+        // Only the user running the daemon may drive it.
+        bool authorize_peer(int fd, Peer &peer) {
+            std::uint32_t uid = 0;
+            if (!peer_uid(fd, uid)) {
+                spdlog::warn("rejecting connection: cannot read peer credentials");
+                return false;
+            }
+            if (uid != static_cast<std::uint32_t>(::getuid())) {
+                spdlog::warn("rejecting connection from uid {} (daemon runs as {})",
+                             uid, ::getuid());
+                return false;
+            }
+            peer = Peer{/*local=*/true, uid};
+            return true;
+        }
+
         // A connected Unix-socket fd as a full-duplex frame pipe. send() is
         // serialized so concurrent writers can't interleave frames; recv() is
         // unblocked by close() shutting the fd down from another thread.
@@ -158,6 +199,12 @@ namespace hestia::ipc {
                     const int conn = ::accept(fd_, nullptr, nullptr);
                     if (conn < 0) continue;
 
+                    Peer peer;
+                    if (!authorize_peer(conn, peer)) {
+                        ::close(conn);
+                        continue;
+                    }
+
                     reap_finished();
                     auto connection = std::make_shared<PosixConnection>(conn);
                     auto done = std::make_shared<std::atomic<bool>>(false);
@@ -166,8 +213,8 @@ namespace hestia::ipc {
                         live_.push_back(connection);
                     }
                     workers_.push_back(Worker{
-                        std::thread([this, connection, done, &on_connection] {
-                            on_connection(connection);
+                        std::thread([this, connection, peer, done, &on_connection] {
+                            on_connection(connection, peer);
                             forget(connection);
                             done->store(true);
                         }),
@@ -240,6 +287,7 @@ namespace hestia::ipc {
     std::unique_ptr<Listener> bind_listener(const fs::path &endpoint) {
         std::error_code ec;
         fs::create_directories(endpoint.parent_path(), ec);
+        ::chmod(endpoint.parent_path().c_str(), 0700);
 
         const int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
         if (fd < 0) throw_errno("socket");
@@ -274,6 +322,8 @@ namespace hestia::ipc {
                 throw_errno("bind");
             }
         }
+
+        ::chmod(path.c_str(), 0600);
 
         if (::listen(fd, 16) != 0) {
             ::close(fd);

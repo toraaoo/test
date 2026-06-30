@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -31,9 +32,17 @@ namespace hestia::ipc {
         virtual void close() = 0;
     };
 
-    // Invoked once per accepted connection, on its own thread. Returns when the
-    // connection should be torn down (typically when the peer disconnects).
-    using ConnectionHandler = std::function<void(std::shared_ptr<Connection>)>;
+    // The verified identity of an accepted connection's peer. The seam where a
+    // future remote transport carries a token/cert instead of a local uid.
+    struct Peer {
+        bool local = true;
+        std::uint32_t uid = 0;
+    };
+
+    // Invoked once per accepted connection, on its own thread, with the verified
+    // peer identity. Returns when the connection should be torn down.
+    using ConnectionHandler =
+        std::function<void(std::shared_ptr<Connection>, const Peer &)>;
 
     // Server side, owned by the daemon. One instance per endpoint.
     class Listener {

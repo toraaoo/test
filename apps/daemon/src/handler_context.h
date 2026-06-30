@@ -23,5 +23,6 @@ namespace hestia::daemon {
         ProcessSupervisor &supervisor;
         EventHub &hub;
         std::shared_ptr<ipc::Connection> connection;
+        ipc::Peer peer;
     };
 }

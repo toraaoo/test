@@ -45,6 +45,7 @@ target_link_libraries(hestia_shared
         spdlog::spdlog
         fmt::fmt
         Threads::Threads
+        $<$<PLATFORM_ID:Windows>:advapi32> # token/SID APIs for the pipe DACL
 )
 
 target_compile_options(hestia_shared PRIVATE

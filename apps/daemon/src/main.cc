@@ -44,6 +44,7 @@ namespace {
     // response. The context carries the connection, so streaming channels
     // (events.subscribe) are ordinary handlers.
     void serve_connection(std::shared_ptr<hestia::ipc::Connection> conn,
+                          const hestia::ipc::Peer &peer,
                           const hestia::daemon::Router &router,
                           hestia::engine::Engine &engine,
                           hestia::daemon::ProcessSupervisor &supervisor,
@@ -58,7 +59,7 @@ namespace {
                     hestia::ipc::Response::failure(hestia::ipc::errors::kBadRequest, e.what())));
                 continue;
             }
-            hestia::daemon::HandlerContext ctx{engine, supervisor, hub, conn};
+            hestia::daemon::HandlerContext ctx{engine, supervisor, hub, conn, peer};
             auto res = router.route(req, ctx);
             res.id = req.id;
             conn->send(hestia::ipc::encode(res));
@@ -100,9 +101,10 @@ namespace {
 #endif
 
         spdlog::info("hestiad listening on {}", endpoint.string());
-        listener->serve([&](std::shared_ptr<hestia::ipc::Connection> conn) {
-            spdlog::debug("client connected");
-            serve_connection(std::move(conn), router, engine, *supervisor, hub);
+        listener->serve([&](std::shared_ptr<hestia::ipc::Connection> conn,
+                            const hestia::ipc::Peer &peer) {
+            spdlog::debug("client connected (uid {})", peer.uid);
+            serve_connection(std::move(conn), peer, router, engine, *supervisor, hub);
             spdlog::debug("client disconnected");
         });
         g_listener.store(nullptr);
