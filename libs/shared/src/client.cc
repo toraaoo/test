@@ -227,7 +227,12 @@ namespace hestia::client {
             }
 
             std::unique_lock<std::mutex> lk(mu);
-            cv.wait(lk, [&] { return closed || ready.count(id) > 0; });
+            // Bound the wait so a wedged handler can't hang the caller forever.
+            if (!cv.wait_for(lk, kCallTimeout, [&] { return closed || ready.count(id) > 0; })) {
+                ready.erase(id);
+                throw std::runtime_error("timed out waiting for daemon response on '" +
+                                         channel + "'");
+            }
             const auto it = ready.find(id);
             if (it == ready.end()) throw std::runtime_error("daemon closed the connection");
             ipc::Response res = std::move(it->second);
@@ -248,6 +253,8 @@ namespace hestia::client {
         std::map<long long, ipc::Response> ready;
         EventCallback on_event;
         bool closed = false;
+
+        static constexpr auto kCallTimeout = std::chrono::seconds(10);
     };
 
     Client::Client(std::unique_ptr<Detail> detail) : d_(std::move(detail)) {}
